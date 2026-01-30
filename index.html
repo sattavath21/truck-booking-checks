@@ -215,6 +215,7 @@
         }
 
         async function markPassed(id) {
+            console.log("Marking as passed:", id);
             const btn = document.querySelector(`button[data-id="${id}"]`);
             if (btn) {
                 btn.disabled = true;

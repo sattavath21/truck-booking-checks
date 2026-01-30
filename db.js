@@ -51,7 +51,10 @@ class TruckDB {
         const querySnapshot = await getDocs(q);
         const data = [];
         querySnapshot.forEach((doc) => {
-            data.push({ id: doc.id, ...doc.data() });
+            const itemData = doc.data();
+            // Ensure Firestore's document ID is what we use as the 'id', 
+            // even if the data contains an 'id' field.
+            data.push({ ...itemData, id: doc.id });
         });
         return data;
     }
@@ -96,7 +99,10 @@ class TruckDB {
             const batch = writeBatch(this.db);
             const chunk = dataArray.slice(i, i + BATCH_SIZE);
             chunk.forEach(item => {
-                const docRef = doc(collection(this.db, COLLECTION_NAME));
+                // Use the provided ID as document name if available, else auto-gen
+                const docRef = item.id
+                    ? doc(this.db, COLLECTION_NAME, item.id)
+                    : doc(collection(this.db, COLLECTION_NAME));
                 batch.set(docRef, item);
             });
             await batch.commit();
