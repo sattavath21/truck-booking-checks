@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Truck Check - Search</title>
+    <link rel="stylesheet" href="style.css">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Sarabun:wght@400;700&display=swap"
+        rel="stylesheet">
+    <!-- SheetJS for Excel Parsing -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>TMGT LOGISTICS</h1>
+            <div class="nav-links">
+                <a href="index.html" class="nav-btn active">SEARCH</a>
+                <a href="camera.html" class="nav-btn">CAMERA</a>
+            </div>
+        </header>
+
+        <main>
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="Search by truck plate..." autocomplete="off">
+            </div>
+
+            <div class="upload-section">
+                <div class="upload-controls">
+                    <div class="file-input-wrapper">
+                        <label for="excelUpload" class="file-input-label" id="fileLabel">📁 Upload Bookings (Select
+                            Multiple)</label>
+                        <input type="file" id="excelUpload" accept=".xlsx, .xls" multiple>
+                    </div>
+                </div>
+                <button id="wipeBtn" class="nav-btn"
+                    style="width: 100%; background: rgba(239, 68, 68, 0.1); border-color: #ef4444; color: #ef4444; margin-top: 10px;">
+                    🗑️ WIPE ALL DATA
+                </button>
+            </div>
+
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Truck / Container</th>
+                            <th>Customer</th>
+                            <th>Size / Remark</th>
+                        </tr>
+                    </thead>
+                    <tbody id="bookingTable">
+                        <tr>
+                            <td colspan="3" style="text-align:center; padding: 40px; color: var(--text-muted);">
+                                Loading bookings...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+
+    <script src="db.js"></script>
+    <script src="mockData.js"></script>
+    <script>
+        const tableBody = document.getElementById('bookingTable');
+        const searchInput = document.getElementById('searchInput');
+        const excelUpload = document.getElementById('excelUpload');
+        const fileLabel = document.getElementById('fileLabel');
+
+        async function initPage() {
+            await truckDB.init();
+            renderTable();
+
+            searchInput.addEventListener('input', () => {
+                renderTable(searchInput.value);
+            });
+
+            const wipeBtn = document.getElementById('wipeBtn');
+            wipeBtn.addEventListener('click', async () => {
+                if (confirm('Are you sure you want to WIPE ALL bookings? This cannot be undone.')) {
+                    wipeBtn.disabled = true;
+                    wipeBtn.innerText = '⏳ WIPING...';
+                    await truckDB.clearAll();
+                    wipeBtn.innerText = '🗑️ DATA WIPED';
+                    renderTable();
+                    setTimeout(() => {
+                        wipeBtn.innerText = '🗑️ WIPE ALL DATA';
+                        wipeBtn.disabled = false;
+                    }, 3000);
+                }
+            });
+
+            excelUpload.addEventListener('change', handleExcel);
+        }
+
+        async function handleExcel(e) {
+            const files = Array.from(e.target.files);
+            if (files.length === 0) return;
+
+            fileLabel.innerText = `⏳ PROCESSING ${files.length} FILES...`;
+
+            let totalAdded = 0;
+
+            const processFile = (file) => {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = async (evt) => {
+                        try {
+                            const data = evt.target.result;
+                            const workbook = XLSX.read(data, { type: 'binary' });
+                            const sheetName = workbook.SheetNames[0];
+                            const sheet = workbook.Sheets[sheetName];
+                            const rows = XLSX.utils.sheet_to_json(sheet, { range: 3 });
+
+                            const uploadDate = new Date().toLocaleString();
+
+                            const findColFuzzy = (row, targets) => {
+                                const keys = Object.keys(row);
+                                const cleanStr = (s) => s.toString().toLowerCase().replace(/\s/g, '');
+                                for (let target of targets) {
+                                    const targetClean = cleanStr(target);
+                                    for (let key of keys) {
+                                        if (cleanStr(key) === targetClean) return key;
+                                    }
+                                }
+                                for (let target of targets) {
+                                    const targetClean = cleanStr(target);
+                                    for (let key of keys) {
+                                        if (cleanStr(key).includes(targetClean)) return key;
+                                    }
+                                }
+                                return null;
+                            };
+
+                            const clean = (val) => {
+                                if (val === undefined || val === null) return '-';
+                                let s = val.toString().trim();
+                                return (s.toLowerCase() === 'nan' || s === '' || s.toLowerCase() === 'none') ? '-' : s;
+                            };
+
+                            const newBookings = rows.map(row => {
+                                const truckKey = findColFuzzy(row, ['Truck In No.', 'Truck No.']);
+                                const truck = clean(row[truckKey]);
+                                if (truck === '-') return null;
+
+                                const contOutKey = findColFuzzy(row, ['Container Out 1', 'Container Out']);
+                                const contInKey = findColFuzzy(row, ['Container In 1', 'Container In No.', 'Container In', 'Container No.']);
+                                const tsKey = findColFuzzy(row, ['TRUCK / Size **', 'TRUCK / SIZE', 'Truck Size']);
+                                const csKey = findColFuzzy(row, ['CONTAINER / SIZE*', 'CONTAINER / SIZE', 'Container Size']);
+                                const remKey = findColFuzzy(row, ['Remark', 'REMARK']);
+                                const jobKey = findColFuzzy(row, ['Job  No.', 'JobNo']);
+
+                                let contVal = contOutKey ? clean(row[contOutKey]) : '-';
+                                if (contVal === '-') {
+                                    contVal = contInKey ? clean(row[contInKey]) : '-';
+                                }
+
+                                const jobVal = clean(row[jobKey]);
+                                return {
+                                    id: `${truck}_${jobVal}`.replace(/\s/g, '_'),
+                                    job: jobVal,
+                                    truck: truck,
+                                    trailer: clean(row[findColFuzzy(row, ['Trailer In No.', 'Trailer No.'])]),
+                                    container: contVal,
+                                    truckSize: tsKey ? clean(row[tsKey]) : '-',
+                                    containerSize: csKey ? clean(row[csKey]) : '-',
+                                    remark: remKey ? clean(row[remKey]) : '-',
+                                    customer: clean(row[findColFuzzy(row, ['Customer Name', 'Customer'])]),
+                                    status: 'Pending',
+                                    uploadedDate: uploadDate,
+                                    timestamp: Date.now()
+                                };
+                            }).filter(b => b !== null);
+
+                            await truckDB.seedData(newBookings);
+                            totalAdded += newBookings.length;
+                            resolve();
+                        } catch (err) {
+                            reject(err);
+                        }
+                    };
+                    reader.onerror = reject;
+                    reader.readAsBinaryString(file);
+                });
+            };
+
+            try {
+                for (const file of files) {
+                    await processFile(file);
+                }
+                fileLabel.innerText = `✅ SUCCESS: ${totalAdded} BOOKINGS ADDED`;
+                renderTable();
+                setTimeout(() => { fileLabel.innerText = "📁 Upload Bookings (Select Multiple)"; }, 5000);
+            } catch (err) {
+                console.error(err);
+                alert("Error processing one or more files.");
+                fileLabel.innerText = "❌ UPLOAD FAILED";
+            }
+        }
+
+        async function renderTable(filter = '') {
+            const bookings = await truckDB.getAllBookings();
+            const normalizedFilter = truckDB.normalize(filter);
+
+            const filtered = bookings.filter(b => {
+                const bTruck = truckDB.normalize(b.truck);
+                return bTruck.includes(normalizedFilter);
+            });
+
+            if (filtered.length === 0) {
+                tableBody.innerHTML = `<tr><td colspan="3" style="text-align:center; padding: 40px; color: var(--text-muted);">No bookings found</td></tr>`;
+                return;
+            }
+
+            tableBody.innerHTML = filtered.map(b => `
+                <tr class="${b.isBL ? 'row-blacklist' : ''}">
+                    <td>
+                        <div class="plate-cell">
+                            <!-- Truck & Trailer Card -->
+<div class="chip-group">
+    <span class="status-badge bg-warning badge-stack">
+        <div class="stack-row">
+            <span class="badge-label">Truck</span>
+            <span class="badge-value">${b.truck}</span>
+        </div>
+        <div class="stack-row">
+            <span class="badge-label">Trailer</span>
+            <span class="badge-value">
+                ${b.trailer && b.trailer !== '-' ? b.trailer : '-'}
+            </span>
+        </div>
+    </span>
+</div>
+
+                            
+                            <!-- Container Card -->
+                            ${b.container && b.container !== '-' ? `
+                                <div class="chip-group">
+                                    <span class="chip chip-solo bg-success"><span class="badge-label">Cont</span>${b.container}</span>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </td>
+                    <td><div style="font-size: 0.85rem">${b.customer}</div></td>
+                    <td>
+                        <div class="size-cell">
+                            <div class="chip-group" style="justify-content: flex-end; margin-bottom: 4px; gap: 2px">
+                                ${b.truckSize && b.truckSize !== '-' ? `<span class="status-badge bg-warning" style="margin-left: 4px;"><span class="badge-label">T-Size</span>${b.truckSize}</span>` : ''}
+                                ${b.containerSize && b.containerSize !== '-' ? `<span class="status-badge bg-success" style="margin-left: 4px;"><span class="badge-label">C-Size</span>${b.containerSize}</span>` : ''}
+                            </div>
+                            ${b.remark && b.remark !== '-' ? `<div class="remark-text">${b.remark}</div>` : ''}
+                            <span class="upload-date">Added: ${b.uploadedDate || 'Mock'}</span>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        initPage();
+    </script>
+</body>
+
+</html>

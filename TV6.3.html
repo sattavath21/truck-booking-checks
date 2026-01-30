@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TMGT LOGISTICS PRO v5.3 (Interaction Stats)</title>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root { 
+            --primary: #1e293b; --accent: #10b981; --warning: #f59e0b; 
+            --danger: #ef4444; --bg: #f1f5f9; --text: #334155; --edit: #0ea5e9;
+            --dark: #334155; --duplicate: #f5f3ff;
+        }
+        body { font-family: 'Sarabun', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }
+        .container { max-width: 1600px; margin: auto; }
+        .header-panel { background: var(--primary); padding: 20px 30px; border-radius: 15px; color: white; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .action-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; align-items: center; }
+        
+        .btn { padding: 10px 16px; border-radius: 8px; border: none; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 6px; font-size: 14px; transition: 0.2s; font-family: 'Sarabun'; }
+        .btn-upload { background: var(--accent); color: white; }
+        .btn-graph { background: #6366f1; color: white; }
+        .btn-info { background: white; color: var(--primary); border: 1px solid #ddd; }
+        .btn-dark { background: var(--dark); color: white; }
+        .btn-danger { background: #fee2e2; color: var(--danger); }
+        
+        .btn-action { padding: 6px 10px; border-radius: 6px; font-size: 11px; border: none; cursor: pointer; font-weight: 600; font-family: 'Sarabun'; transition: 0.2s; color: white; }
+        .btn-edit { background: var(--edit); }
+        .btn-release { background: var(--accent); }
+        .btn-bl { background: #450a0a; }
+        .btn-cancel { background: var(--danger); }
+
+        .dashboard-grid { display: none; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 20px; margin-bottom: 20px; }
+        .chart-card { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); height: 300px; }
+        
+        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px; }
+        .stat-card { background: white; padding: 15px; border-radius: 12px; border-top: 4px solid var(--accent); text-align: center; cursor: pointer; transition: 0.2s; }
+        .stat-card:hover { transform: translateY(-5px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+        .stat-value { font-size: 24px; font-weight: 700; color: var(--primary); }
+
+        .table-container { background: white; border-radius: 12px; overflow: auto; max-height: 550px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        table { width: 100%; border-collapse: collapse; min-width: 1200px; }
+        th { background: #f8fafc; padding: 15px; text-align: left; position: sticky; top: 0; z-index: 10; border-bottom: 2px solid #edf2f7; font-size: 14px; }
+        td { padding: 8px 15px; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
+
+        .row-released { background-color: #f0fdf4 !important; opacity: 0.8; }
+        .row-duplicate { background-color: var(--duplicate) !important; border-left: 5px solid #8b5cf6; }
+        .row-blacklist { background-color: #fee2e2 !important; color: #991b1b !important; }
+
+        .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 1000; backdrop-filter: blur(4px); }
+        .modal-content { background: white; margin: 50px auto; width: 90%; max-width: 500px; border-radius: 15px; padding: 25px; }
+        .input-group { margin-bottom: 15px; }
+        .input-group label { display: block; margin-bottom: 5px; font-weight: 600; }
+        .input-group input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
+        
+        .filter-active { border: 2px solid var(--edit) !important; background: #e0f2fe; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header-panel">
+        <div><h1 style="margin:0; font-size: 22px;">TMGT LOGISTICS PRO v5.3</h1><small id="display-date">-</small></div>
+        <input type="date" id="dateFilter" onchange="loadDataFromDB()" style="padding:8px; border-radius:8px; border:none; font-family:'Sarabun'; cursor:pointer;">
+    </div>
+
+    <div class="action-bar">
+        <input type="file" id="excel-files" style="display:none" multiple>
+        <button class="btn btn-upload" onclick="document.getElementById('excel-files').click()">📥 นำเข้าไฟล์ </button>
+        <button class="btn btn-dark" onclick="resetFilter()">📋 ดูข้อมูลทั้งหมด</button>
+        <button class="btn btn-graph" onclick="toggleDashboard()">📊 ดูสถิติกราฟ</button>
+        <button class="btn btn-info" onclick="openModal('manualModal')">➕ เพิ่มรถนอก/BL</button>
+        <button class="btn btn-info" onclick="exportData()">📤 ส่งออก</button>
+        <button class="btn btn-danger" onclick="smartDelete()">🗑 ล้างข้อมูลวันนี้</button>
+        <input type="text" id="searchInput" onkeyup="renderTable()" placeholder="🔍 ค้นหา (ทะเบียน, Job, ลูกค้า)..." style="flex-grow:1; padding:12px; border-radius:10px; border:1px solid #ddd;">
+    </div>
+
+    <div id="dashboard" class="dashboard-grid">
+        <div class="chart-card"><canvas id="statusChart"></canvas></div>
+        <div class="chart-card"><canvas id="customerChart"></canvas></div>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card" id="card-total" onclick="resetFilter()"><span>ทั้งหมดวันนี้</span><div class="stat-value" id="stat-total">0</div></div>
+        <div class="stat-card" id="card-pending" style="border-top-color: var(--warning)" onclick="setFilter('Pending')"><span>รอปล่อย</span><div class="stat-value" id="stat-pending">0</div></div>
+        <div class="stat-card" id="card-done" style="border-top-color: var(--accent)" onclick="setFilter('Released')"><span>ปล่อยแล้ว (คลิกดู)</span><div class="stat-value" id="stat-done">0</div></div>
+        <div class="stat-card" id="card-risk" style="border-top-color: var(--danger)" onclick="setFilter('Blacklist')"><span>แบล็คลิสต์ (คลิกดู)</span><div class="stat-value" id="stat-risk">0</div></div>
+    </div>
+
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>เวลานำเข้า</th>
+                    <th>Job No.</th>
+                    <th>ทะเบียนหัว</th>
+                    <th>ทะเบียนหาง</th>
+                    <th>ลูกค้า</th>
+                    <th>เวลาปล่อย</th>
+                    <th>สถานะ</th>
+                    <th style="text-align:center">จัดการ</th>
+                </tr>
+            </thead>
+            <tbody id="table-body"></tbody>
+        </table>
+    </div>
+</div>
+
+<div id="editModal" class="modal">
+    <div class="modal-content">
+        <h3>📝 แก้ไขรายละเอียด</h3>
+        <input type="hidden" id="edit-id">
+        <div class="input-group"><label>ทะเบียนหัว</label><input type="text" id="edit-truck"></div>
+        <div class="input-group"><label>ทะเบียนหาง</label><input type="text" id="edit-trailer"></div>
+        <div class="input-group"><label>ลูกค้า</label><input type="text" id="edit-cust"></div>
+        <div style="display:flex; gap:10px;">
+            <button class="btn btn-upload" style="flex:1" onclick="saveEdit()">💾 บันทึก</button>
+            <button class="btn btn-info" style="flex:1" onclick="closeModal('editModal')">ยกเลิก</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let db, currentData = [], charts = {}, currentFilter = 'All';
+    const DB_NAME = 'TMGT_Database', STORE_NAME = 'LogisticsData';
+
+    const request = indexedDB.open(DB_NAME, 1);
+    request.onsuccess = (e) => { db = e.target.result; loadDataFromDB(); };
+    request.onupgradeneeded = (e) => { e.target.result.createObjectStore(STORE_NAME, { keyPath: 'id' }); };
+
+    document.getElementById('dateFilter').valueAsDate = new Date();
+
+    async function loadDataFromDB() {
+        const selDate = document.getElementById('dateFilter').value;
+        const tx = db.transaction(STORE_NAME, 'readonly');
+        tx.objectStore(STORE_NAME).getAll().onsuccess = (e) => {
+            currentData = e.target.result.filter(item => item.uDate === selDate)
+                .sort((a, b) => b.timestamp - a.timestamp);
+            renderTable(); updateCharts();
+            document.getElementById('display-date').innerText = "ข้อมูลวันที่: " + new Date(selDate).toLocaleDateString('th-TH', {year:'numeric', month:'long', day:'numeric'});
+        };
+    }
+
+    // ฟังก์ชันกรองข้อมูล
+    function setFilter(type) {
+        currentFilter = type;
+        document.querySelectorAll('.stat-card').forEach(c => c.classList.remove('filter-active'));
+        if(type === 'Released') document.getElementById('card-done').classList.add('filter-active');
+        if(type === 'Blacklist') document.getElementById('card-risk').classList.add('filter-active');
+        if(type === 'Pending') document.getElementById('card-pending').classList.add('filter-active');
+        renderTable();
+    }
+
+    function resetFilter() {
+        currentFilter = 'All';
+        document.querySelectorAll('.stat-card').forEach(c => c.classList.remove('filter-active'));
+        renderTable();
+    }
+
+    // นำเข้าไฟล์ A5+
+    document.getElementById('excel-files').addEventListener('change', async function(e) {
+        const selDate = document.getElementById('dateFilter').value;
+        const uTime = new Date().toLocaleTimeString('th-TH', {hour:'2-digit', minute:'2-digit'});
+        let count = 0;
+
+        for (let file of e.target.files) {
+            const buffer = await file.arrayBuffer();
+            const workbook = XLSX.read(buffer, {type: 'array'});
+            const sheet = workbook.Sheets[workbook.SheetNames[0]];
+            const rawRows = XLSX.utils.sheet_to_json(sheet, {header: 1, defval: ""});
+
+            const tx = db.transaction(STORE_NAME, 'readwrite');
+            const store = tx.objectStore(STORE_NAME);
+
+            for (let i = 4; i < Math.min(rawRows.length, 200); i++) {
+                const row = rawRows[i];
+                const job = row[1] ? row[1].toString().trim() : "-";
+                const customer = row[6] ? row[6].toString().trim() : "-";
+                const truck = row[13] ? row[13].toString().trim() : "";
+                const trailer = row[15] ? row[15].toString().trim() : "-";
+
+                if (truck !== "") {
+                    store.put({
+                        id: job + "_" + truck + "_" + Date.now() + i,
+                        timestamp: Date.now() + i,
+                        uTime: uTime, uDate: selDate,
+                        job: job, truck: truck, trailer: trailer, customer: customer,
+                        gateOut: '-', status: 'Pending', isBL: false
+                    });
+                    count++;
+                }
+            }
+            tx.oncomplete = () => loadDataFromDB();
+        }
+        alert("นำเข้าสำเร็จ " + count + " รายการ");
+    });
+
+    function renderTable() {
+        const tbody = document.getElementById('table-body');
+        const search = document.getElementById('searchInput').value.toLowerCase();
+        tbody.innerHTML = '';
+        const truckCount = {};
+        currentData.forEach(d => truckCount[d.truck] = (truckCount[d.truck] || 0) + 1);
+
+        let filtered = currentData.filter(d => (d.job + d.truck + d.customer).toLowerCase().includes(search));
+        
+        // กรองตามปุ่มที่กดสถิติ
+        if(currentFilter === 'Released') filtered = filtered.filter(d => d.status === 'Released');
+        if(currentFilter === 'Blacklist') filtered = filtered.filter(d => d.isBL);
+        if(currentFilter === 'Pending') filtered = filtered.filter(d => d.status === 'Pending');
+
+        filtered.forEach(d => {
+            const isDup = truckCount[d.truck] > 1;
+            const tr = document.createElement('tr');
+            if(d.status === 'Released') tr.className = 'row-released';
+            if(isDup && d.status !== 'Released') tr.className = 'row-duplicate';
+            if(d.isBL) tr.className = 'row-blacklist';
+
+            tr.innerHTML = `
+                <td>${d.uTime}</td>
+                <td>${d.job}</td>
+                <td style="font-weight:700;">${d.truck} ${isDup ? '<small style="color:#8b5cf6;">(ซ้ำ)</small>':''}</td>
+                <td>${d.trailer}</td>
+                <td>${d.customer}</td>
+                <td style="color:var(--accent); font-weight:700;">${d.gateOut}</td>
+                <td><b>${d.status}</b></td>
+                <td style="text-align:center">
+                    <div style="display:flex; gap:4px; justify-content:center;">
+                        <button class="btn-action btn-edit" onclick="openEdit('${d.id}')">📝</button>
+                        <button class="btn-action btn-release" onclick="toggleRelease('${d.id}')">${d.status==='Released'?'↩️':'🚚'}</button>
+                        <button class="btn-action btn-bl" onclick="toggleBL('${d.id}')">🚫</button>
+                        <button class="btn-action btn-cancel" onclick="cancelRow('${d.id}')">🗑️</button>
+                    </div>
+                </td>`;
+            tbody.appendChild(tr);
+        });
+        updateStats();
+    }
+
+    // --- ฟังก์ชันเสริมอื่นๆ ---
+    function toggleRelease(id) {
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        const store = tx.objectStore(STORE_NAME);
+        store.get(id).onsuccess = (e) => {
+            const d = e.target.result;
+            d.status = d.status === 'Released' ? 'Pending' : 'Released';
+            d.gateOut = d.status === 'Released' ? new Date().toLocaleTimeString('th-TH', {hour:'2-digit', minute:'2-digit'}) : '-';
+            store.put(d); tx.oncomplete = () => loadDataFromDB();
+        };
+    }
+
+    function cancelRow(id) { if(confirm("ลบรายการนี้?")) { const tx = db.transaction(STORE_NAME, 'readwrite'); tx.objectStore(STORE_NAME).delete(id); tx.oncomplete = () => loadDataFromDB(); } }
+
+    function openEdit(id) {
+        const d = currentData.find(x => x.id === id);
+        document.getElementById('edit-id').value = d.id;
+        document.getElementById('edit-truck').value = d.truck;
+        document.getElementById('edit-trailer').value = d.trailer;
+        document.getElementById('edit-cust').value = d.customer;
+        openModal('editModal');
+    }
+
+    function saveEdit() {
+        const id = document.getElementById('edit-id').value;
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        const store = tx.objectStore(STORE_NAME);
+        store.get(id).onsuccess = (e) => {
+            const d = e.target.result;
+            d.truck = document.getElementById('edit-truck').value;
+            d.trailer = document.getElementById('edit-trailer').value;
+            d.customer = document.getElementById('edit-cust').value;
+            store.put(d); tx.oncomplete = () => { closeModal('editModal'); loadDataFromDB(); };
+        };
+    }
+
+    function toggleBL(id) {
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        const store = tx.objectStore(STORE_NAME);
+        store.get(id).onsuccess = (e) => { const d = e.target.result; d.isBL = !d.isBL; store.put(d); tx.oncomplete = () => loadDataFromDB(); };
+    }
+
+    function updateStats() {
+        const total = currentData.length;
+        const done = currentData.filter(x => x.status === 'Released').length;
+        const risk = currentData.filter(x => x.isBL).length;
+        document.getElementById('stat-total').innerText = total;
+        document.getElementById('stat-pending').innerText = total - done;
+        document.getElementById('stat-done').innerText = done;
+        document.getElementById('stat-risk').innerText = risk;
+    }
+
+    function updateCharts() {
+        if (charts.status) charts.status.destroy();
+        if (charts.cust) charts.cust.destroy();
+        const released = currentData.filter(d => d.status === 'Released').length;
+        charts.status = new Chart(document.getElementById('statusChart'), {
+            type: 'doughnut',
+            data: { labels: ['ปล่อยแล้ว', 'รอปล่อย'], datasets: [{ data: [released, currentData.length - released], backgroundColor: ['#10b981', '#f59e0b'] }] },
+            options: { maintainAspectRatio: false }
+        });
+        const custMap = {}; currentData.forEach(d => custMap[d.customer] = (custMap[d.customer] || 0) + 1);
+        const top = Object.entries(custMap).sort((a,b)=>b[1]-a[1]).slice(0, 5);
+        charts.cust = new Chart(document.getElementById('customerChart'), {
+            type: 'bar',
+            data: { labels: top.map(x=>x[0]), datasets: [{ label: 'จำนวนคัน', data: top.map(x=>x[1]), backgroundColor: '#6366f1' }] },
+            options: { maintainAspectRatio: false }
+        });
+    }
+
+    function openModal(id) { document.getElementById(id).style.display = 'block'; }
+    function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+    function toggleDashboard() { const d = document.getElementById('dashboard'); d.style.display = d.style.display === 'grid' ? 'none' : 'grid'; }
+    function smartDelete() { if(confirm("ล้างข้อมูลทั้งหมดวันนี้?")) { const tx = db.transaction(STORE_NAME, 'readwrite'); currentData.forEach(d => tx.objectStore(STORE_NAME).delete(d.id)); tx.oncomplete = () => loadDataFromDB(); } }
+    function exportData() {
+        const ws = XLSX.utils.json_to_sheet(currentData.map(x => ({ "Job":x.job, "หัว":x.truck, "หาง":x.trailer, "ลูกค้า":x.customer, "สถานะ":x.status, "เวลาปล่อย":x.gateOut })));
+        const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Logs"); XLSX.writeFile(wb, "TMGT_Report.xlsx");
+    }
+</script>
+
+<div id="manualModal" class="modal"><div class="modal-content"><h3>➕ เพิ่มรถนอก/BL</h3><div class="input-group"><label>ทะเบียนหัว*</label><input type="text" id="m-truck"></div><div class="input-group"><label>ลูกค้า</label><input type="text" id="m-cust"></div><button class="btn btn-upload" style="width:100%" onclick="addManual()">บันทึก</button><button class="btn btn-info" style="width:100%;margin-top:5px" onclick="closeModal('manualModal')">ปิด</button></div></div>
+<script>
+    function addManual() {
+        const t = document.getElementById('m-truck').value; if(!t) return;
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        tx.objectStore(STORE_NAME).put({ id: "M_"+Date.now(), timestamp: Date.now(), uTime: new Date().toLocaleTimeString('th-TH'), uDate: document.getElementById('dateFilter').value, job: 'MANUAL', truck: t, trailer: '-', customer: document.getElementById('m-cust').value || '-', gateOut: '-', status: 'Pending', isBL: false });
+        tx.oncomplete = () => { closeModal('manualModal'); loadDataFromDB(); };
+    }
+</script>
+
+</body>
+</html>

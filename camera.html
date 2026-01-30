@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Truck Check - Camera</title>
+    <link rel="stylesheet" href="style.css">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Sarabun:wght@400;700&display=swap"
+        rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>TMGT LOGISTICS</h1>
+            <div class="nav-links">
+                <a href="index.html" class="nav-btn">SEARCH</a>
+                <a href="camera.html" class="nav-btn active">CAMERA</a>
+            </div>
+        </header>
+
+        <main>
+            <div class="camera-container">
+                <video id="video" autoplay playsinline></video>
+                <div class="scan-overlay">
+                    <div class="scan-box"></div>
+                </div>
+            </div>
+
+            <div style="text-align: center;">
+                <div id="plateDisplay"
+                    style="font-size: 1.5rem; font-weight: 800; margin-bottom: 10px; color: var(--accent);">
+                    FINDING PLATE...
+                </div>
+                <div id="statusIndicator" class="scan-status bg-warning"
+                    style="display:inline-block; margin-bottom: 20px;">
+                    SCANNING...
+                </div>
+
+                <div id="resultCard"
+                    style="display:none; background: var(--glass); padding: 20px; border-radius: 16px; margin-bottom: 20px; text-align: left; border-left: 4px solid var(--success);">
+                    <div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 12px;">CUSTOMER</div>
+                    <div id="resCustomer"
+                        style="font-size: 1.1rem; font-weight: 700; margin-bottom: 16px; line-height: 1.2;">-</div>
+
+                    <div class="plate-cell">
+                        <!-- Truck & Trailer Card (Stacked) -->
+                        <div class="chip-group">
+                            <span class="status-badge bg-warning badge-stack" style="width: 100%;">
+                                <div class="stack-row">
+                                    <span class="badge-label">Truck</span>
+                                    <span class="badge-value" id="resTruck">-</span>
+                                </div>
+                                <div class="stack-row" id="resTrailerRow">
+                                    <span class="badge-label">Trailer</span>
+                                    <span class="badge-value" id="resTrailer">-</span>
+                                </div>
+                            </span>
+                        </div>
+
+                        <!-- Truck Size -->
+                        <div id="resTruckSizeGroup" class="chip-group">
+                            <span class="status-badge bg-warning"><span class="badge-label">T-Size</span><span
+                                    id="resTruckSize">-</span></span>
+                        </div>
+
+                        <div style="height: 4px;"></div>
+
+                        <!-- Container Card -->
+                        <div id="resContainerGroup" class="chip-group">
+                            <span class="chip chip-solo bg-success"><span class="badge-label">Cont</span><span
+                                    id="resContainer">-</span></span>
+                        </div>
+
+                        <!-- Container Size -->
+                        <div id="resContSizeGroup" class="chip-group">
+                            <span class="status-badge bg-success"><span class="badge-label">C-Size</span><span
+                                    id="resContSize">-</span></span>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 16px;">
+                        <div style="color: var(--text-muted); font-size: 0.75rem; margin-bottom: 4px;">REMARK</div>
+                        <div id="resRemark" style="font-size: 0.9rem; color: var(--warning); font-style: italic;">-
+                        </div>
+                    </div>
+                </div>
+
+                <button id="actionBtn" class="btn-primary" onclick="toggleScan()">STOP SCAN</button>
+
+                <div id="debugView"
+                    style="margin-top: 20px; font-size: 0.75rem; color: var(--text-muted); font-family: monospace; white-space: pre-wrap; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px; text-align: left; display: none;">
+                    DEBUG: RAW OCR OUTPUT WILL APPEAR HERE
+                </div>
+                <button onclick="document.getElementById('debugView').style.display = 'block'"
+                    style="background: none; border: none; color: var(--text-muted); font-size: 0.7rem; margin-top: 10px; cursor: pointer;">Show
+                    Debug Info</button>
+            </div>
+        </main>
+    </div>
+
+    <canvas id="canvas" style="display:none;"></canvas>
+
+    <script src="db.js"></script>
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const plateDisplay = document.getElementById('plateDisplay');
+        const statusIndicator = document.getElementById('statusIndicator');
+        const resultCard = document.getElementById('resultCard');
+        const actionBtn = document.getElementById('actionBtn');
+
+        let scanning = true;
+        let scheduler = null;
+        let worker = null;
+
+        async function initCamera() {
+            await truckDB.init();
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+                });
+                video.srcObject = stream;
+
+                // Init Tesseract
+                worker = await Tesseract.createWorker(['eng', 'tha', 'lao', 'vie']);
+                await worker.setParameters({
+                    tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-กขคฆงจฉชซฌญฎฏฐฑฒณดตถทธนบปผฝพฟภมยรลวศษสหฬอฮກຂຄງຈສຊຍດຕຖທນບປຜຝພຟມຢຣລວຫອຮ. ',
+                });
+
+                requestAnimationFrame(scanLoop);
+            } catch (err) {
+                alert('Camera error: ' + err.message);
+            }
+        }
+
+        async function scanLoop() {
+            if (!scanning) return;
+
+            const vw = video.videoWidth;
+            const vh = video.videoHeight;
+            if (vw === 0) {
+                requestAnimationFrame(scanLoop);
+                return;
+            }
+
+            // Adjusted to 30% to capture 2-line Vietnamese plates
+            const cropW = vw * 0.92;
+            const cropH = vh * 0.30;
+            const cropX = (vw - cropW) / 2;
+            const cropY = (vh - cropH) / 2;
+
+            canvas.width = cropW;
+            canvas.height = cropH;
+
+            ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+
+            const { data: { text } } = await worker.recognize(canvas);
+
+            // Update debug view
+            if (text) {
+                document.getElementById('debugView').innerText = `DEBUG RAW:\n"${text}"`;
+            }
+
+            const plate = cleanupPlate(text);
+
+            if (plate) {
+                plateDisplay.innerText = plate;
+                checkDatabase(plate);
+            } else {
+                plateDisplay.innerText = "FINDING PLATE...";
+            }
+
+            if (scanning) {
+                setTimeout(() => requestAnimationFrame(scanLoop), 200);
+            }
+        }
+
+        function cleanupPlate(text) {
+            if (!text) return null;
+
+            // 1. Substitution for common OCR errors
+            let cleanText = text.toUpperCase()
+                .replace(/O/g, '0')
+                .replace(/[IL|]/g, '1')
+                .replace(/S/g, '5')
+                .replace(/B/g, '8')
+                .replace(/[^A-Z0-9ก-ฮກ-ຮ\n]/g, '');
+
+            const lines = cleanText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+
+            // Pattern A: Multi-line Viet (e.g. 29A then 62769)
+            for (let i = 0; i < lines.length - 1; i++) {
+                const combined = lines[i] + lines[i + 1];
+                // Viet: 2 digits + 1-2 letters + 4-6 digits (e.g. 29A1234, 29LD12345)
+                const vMatch = combined.match(/\d{2}[A-Z]{1,2}\d{4,6}/);
+                if (vMatch) return vMatch[0];
+            }
+
+            for (let line of lines) {
+                if (line.length < 3 && !/^[ก-ฮກ-ຮ]/.test(line)) continue;
+
+                // Pattern B: Thai/Lao Alpha (ผถ3923, ບກ2032)
+                const alphaMatch = line.match(/[ก-ฮກ-ຮ]{2}\d{4}/);
+                if (alphaMatch) return alphaMatch[0];
+
+                // Pattern C: Thai Numeric (702030, 7002039)
+                const numMatch = line.match(/\d{6,8}/);
+                if (numMatch) return numMatch[0];
+
+                // Pattern D: Vietnamese Single Line / ALpha-Num
+                const vietMatch = line.match(/\d{2}[A-Z]{1,2}\d{4,6}/);
+                if (vietMatch) return vietMatch[0];
+            }
+
+            // Pattern E: Fuzzy Fallback (Any line with letters/digits that's 4-10 chars long)
+            for (let line of lines) {
+                if (line.length >= 4 && line.length <= 10) {
+                    if (/\d{2,}/.test(line)) return line;
+                }
+            }
+
+            return null;
+        }
+
+        async function checkDatabase(plate) {
+            // First try: Exact match (normalized)
+            let found = await truckDB.searchPlate(plate);
+
+            // Second try: Aggressive Noise Removal
+            // If plate is long (5+ chars), try stripping the first character.
+            // This handles things like 043H12345 or 129A67890
+            if (!found && plate.length >= 5) {
+                const suffix = plate.substring(1);
+                found = await truckDB.searchPlate(suffix);
+                if (found) {
+                    plateDisplay.innerText = suffix + " (AUTO-FIXED)";
+                }
+            }
+
+            if (found) {
+                stopScanning();
+                showResult(found);
+            } else {
+                statusIndicator.innerText = "SCANNING...";
+                statusIndicator.className = "scan-status bg-warning";
+                resultCard.style.display = 'none';
+            }
+        }
+
+        function showResult(data) {
+            statusIndicator.innerText = "MATCH FOUND";
+            statusIndicator.className = "scan-status bg-success";
+
+            const clean = (val) => (!val || val.toString().toLowerCase() === 'nan' || val === '-') ? null : val;
+
+            const truck = clean(data.truck) || '-';
+            const trailer = clean(data.trailer);
+            const truckSize = clean(data.truckSize);
+            const container = clean(data.container);
+            const containerSize = clean(data.containerSize);
+            const remark = clean(data.remark);
+
+            document.getElementById('resCustomer').innerText = data.customer || '-';
+            document.getElementById('resTruck').innerText = truck;
+
+            // Trailer
+            const trailerRow = document.getElementById('resTrailerRow');
+            if (trailer) {
+                trailerRow.style.display = 'grid'; // stack-row uses grid
+                document.getElementById('resTrailer').innerText = trailer;
+            } else {
+                trailerRow.style.display = 'none';
+            }
+
+            // Truck Size
+            const sizeGroup = document.getElementById('resTruckSizeGroup');
+            if (truckSize) {
+                sizeGroup.style.display = 'flex';
+                document.getElementById('resTruckSize').innerText = truckSize;
+            } else {
+                sizeGroup.style.display = 'none';
+            }
+
+            // Container
+            const contGroup = document.getElementById('resContainerGroup');
+            if (container) {
+                contGroup.style.display = 'flex';
+                document.getElementById('resContainer').innerText = container;
+            } else {
+                contGroup.style.display = 'none';
+            }
+
+            // Container Size
+            const cSizeGroup = document.getElementById('resContSizeGroup');
+            if (containerSize) {
+                cSizeGroup.style.display = 'flex';
+                document.getElementById('resContSize').innerText = containerSize;
+            } else {
+                cSizeGroup.style.display = 'none';
+            }
+
+            document.getElementById('resRemark').innerText = remark || '-';
+
+            resultCard.style.display = 'block';
+
+            actionBtn.innerText = "RESUME SCAN";
+            actionBtn.className = "btn-primary";
+        }
+
+        function stopScanning() {
+            scanning = false;
+        }
+
+        function toggleScan() {
+            if (scanning) {
+                scanning = false;
+                statusIndicator.innerText = "STOPPED";
+                statusIndicator.className = "scan-status bg-danger";
+                actionBtn.innerText = "RESUME SCAN";
+            } else {
+                scanning = true;
+                statusIndicator.innerText = "SCANNING...";
+                statusIndicator.className = "scan-status bg-warning";
+                actionBtn.innerText = "STOP SCAN";
+                resultCard.style.display = 'none';
+                requestAnimationFrame(scanLoop);
+            }
+        }
+
+        initCamera();
+    </script>
+</body>
+
+</html>
