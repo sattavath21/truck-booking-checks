@@ -10,7 +10,8 @@ import {
     orderBy,
     doc,
     deleteDoc,
-    updateDoc
+    updateDoc,
+    limit
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -38,14 +39,15 @@ class TruckDB {
         return this.db;
     }
 
-    async getAllBookings() {
+    async getAllBookings(rowLimit = 100) {
         const now = Date.now();
         const threeDaysAgo = now - (3 * 24 * 60 * 60 * 1000);
 
         const q = query(
             collection(this.db, COLLECTION_NAME),
             where("timestamp", ">=", threeDaysAgo),
-            orderBy("timestamp", "desc")
+            orderBy("timestamp", "desc"),
+            limit(rowLimit)
         );
 
         const querySnapshot = await getDocs(q);
@@ -62,7 +64,7 @@ class TruckDB {
     normalize(text) {
         if (!text) return '';
         return text.toString().toUpperCase()
-            .replace(/[^A-Z0-9ก-ฮກ-ຮ]/g, '');
+            .replace(/[^A-Z0-9ก-ฮก-ຮ]/g, '');
     }
 
     async searchPlate(plate) {
@@ -88,8 +90,15 @@ class TruckDB {
     }
 
     async updateBooking(id, data) {
-        const docRef = doc(this.db, COLLECTION_NAME, id);
-        await updateDoc(docRef, data);
+        try {
+            console.log("Updating Firestore doc:", id, data);
+            const docRef = doc(this.db, COLLECTION_NAME, id);
+            await updateDoc(docRef, data);
+            return { success: true };
+        } catch (error) {
+            console.error("Firestore update failed for ID:", id, error);
+            throw error;
+        }
     }
 
     async seedData(dataArray) {

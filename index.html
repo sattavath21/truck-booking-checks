@@ -43,6 +43,17 @@
                 </button>
             </div>
 
+            <div class="table-controls"
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding: 0 4px;">
+                <span style="font-size: 0.75rem; color: var(--text-muted);">Rows to fetch:</span>
+                <select id="rowLimit" class="nav-btn" style="padding: 2px 8px; border-radius: 8px; font-size: 0.75rem;">
+                    <option value="5">5 rows</option>
+                    <option value="10" selected>10 rows</option>
+                    <option value="50">50 rows</option>
+                    <option value="100">100 rows</option>
+                </select>
+            </div>
+
             <div class="table-wrapper">
                 <table>
                     <thead>
@@ -87,7 +98,19 @@
             await truckDB.init();
             renderTable();
 
+            renderTable();
+
+            // Debounce search to save quota
+            let searchTimeout;
             searchInput.addEventListener('input', () => {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => {
+                    renderTable(searchInput.value);
+                }, 400); // 400ms delay
+            });
+
+            const rowLimit = document.getElementById('rowLimit');
+            rowLimit.addEventListener('change', () => {
                 renderTable(searchInput.value);
             });
 
@@ -225,8 +248,8 @@
                 await truckDB.updateBooking(id, { status: 'Passed' });
                 renderTable(searchInput.value);
             } catch (err) {
-                console.error(err);
-                alert("Failed to update status.");
+                console.error("markPassed error:", err);
+                alert(`Failed to update status: ${err.message || "Unknown error"}`);
                 if (btn) {
                     btn.disabled = false;
                     btn.innerText = 'Mark as Entry';
@@ -236,7 +259,8 @@
         window.markPassed = markPassed;
 
         async function renderTable(filter = '') {
-            const bookings = await truckDB.getAllBookings();
+            const currentLimit = parseInt(document.getElementById('rowLimit').value) || 10;
+            const bookings = await truckDB.getAllBookings(currentLimit);
             const normalizedFilter = truckDB.normalize(filter);
 
             // Group by truck plate to find re-entries
