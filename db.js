@@ -1,15 +1,16 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { 
-    getFirestore, 
-    collection, 
-    getDocs, 
-    addDoc, 
-    writeBatch, 
-    query, 
-    where, 
-    orderBy, 
+import {
+    getFirestore,
+    collection,
+    getDocs,
+    addDoc,
+    writeBatch,
+    query,
+    where,
+    orderBy,
     doc,
-    deleteDoc 
+    deleteDoc,
+    updateDoc
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -40,7 +41,7 @@ class TruckDB {
     async getAllBookings() {
         const now = Date.now();
         const threeDaysAgo = now - (3 * 24 * 60 * 60 * 1000);
-        
+
         const q = query(
             collection(this.db, COLLECTION_NAME),
             where("timestamp", ">=", threeDaysAgo),
@@ -75,16 +76,17 @@ class TruckDB {
         const q = query(collection(this.db, COLLECTION_NAME));
         const querySnapshot = await getDocs(q);
         const batch = writeBatch(this.db);
-        
+
         querySnapshot.forEach((document) => {
             batch.delete(doc(this.db, COLLECTION_NAME, document.id));
         });
-        
+
         await batch.commit();
     }
 
-    async addBooking(item) {
-        await addDoc(collection(this.db, COLLECTION_NAME), item);
+    async updateBooking(id, data) {
+        const docRef = doc(this.db, COLLECTION_NAME, id);
+        await updateDoc(docRef, data);
     }
 
     async seedData(dataArray) {
