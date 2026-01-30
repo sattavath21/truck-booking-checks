@@ -1,4 +1,4 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-app.js";
 import {
     getFirestore,
     collection,
@@ -12,15 +12,15 @@ import {
     deleteDoc,
     updateDoc,
     limit
-} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+} from "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
 
 const firebaseConfig = {
-    apiKey: "AIzaSyAfRm6yu1tCk0qgWfW6UcfvcqF1zAxnoBQ",
-    authDomain: "device-streaming-70248ccc.firebaseapp.com",
-    projectId: "device-streaming-70248ccc",
-    storageBucket: "device-streaming-70248ccc.firebasestorage.app",
-    messagingSenderId: "993682748672",
-    appId: "1:993682748672:web:5bf00418b42a13c0dbafe5"
+    apiKey: "AIzaSyDZjIOStlLjALPlXMqDMRX1SWA7beHkJjw",
+    authDomain: "truck-booking-checks.firebaseapp.com",
+    projectId: "truck-booking-checks",
+    storageBucket: "truck-booking-checks.firebasestorage.app",
+    messagingSenderId: "298028376982",
+    appId: "1:298028376982:web:5a8c3603b3e998f7e5f3b7"
 };
 
 const COLLECTION_NAME = 'LogisticsData';
@@ -29,6 +29,9 @@ class TruckDB {
     constructor() {
         this.app = null;
         this.db = null;
+        this.cache = null;
+        this.cacheTimestamp = 0;
+        this.CACHE_DURATION = 30000; // 30 seconds
     }
 
     async init() {
@@ -39,26 +42,36 @@ class TruckDB {
         return this.db;
     }
 
-    async getAllBookings(rowLimit = 100) {
+    async getAllBookings(rowLimit = 100, forceRefresh = false) {
         const now = Date.now();
+
+        // Return cache if valid and not forcing refresh
+        if (!forceRefresh && this.cache && (now - this.cacheTimestamp < this.CACHE_DURATION)) {
+            console.log("Returning cached bookings");
+            return this.cache.slice(0, rowLimit);
+        }
+
         const threeDaysAgo = now - (3 * 24 * 60 * 60 * 1000);
 
         const q = query(
             collection(this.db, COLLECTION_NAME),
             where("timestamp", ">=", threeDaysAgo),
             orderBy("timestamp", "desc"),
-            limit(rowLimit)
+            limit(1000) // Fetch more than requested for cache
         );
 
+        console.log("Fetching bookings from Firestore...");
         const querySnapshot = await getDocs(q);
         const data = [];
         querySnapshot.forEach((doc) => {
             const itemData = doc.data();
-            // Ensure Firestore's document ID is what we use as the 'id', 
-            // even if the data contains an 'id' field.
             data.push({ ...itemData, id: doc.id });
         });
-        return data;
+
+        this.cache = data;
+        this.cacheTimestamp = now;
+
+        return data.slice(0, rowLimit);
     }
 
     normalize(text) {
@@ -70,6 +83,8 @@ class TruckDB {
     async searchPlate(plate) {
         if (!plate) return null;
         const target = this.normalize(plate);
+
+        // Always try to use cache for search to save reads, especially for OCR
         const all = await this.getAllBookings();
         return all.find(b => {
             const bTruck = this.normalize(b.truck);
