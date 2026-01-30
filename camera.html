@@ -104,7 +104,7 @@
 
     <canvas id="canvas" style="display:none;"></canvas>
 
-    <script src="db.js"></script>
+    <script type="module" src="db.js"></script>
     <script>
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
@@ -119,7 +119,20 @@
         let worker = null;
 
         async function initCamera() {
+            // Wait for truckDB to be initialized if it's not yet (since it's a module)
+            if (!window.truckDB) {
+                await new Promise(resolve => {
+                    const check = setInterval(() => {
+                        if (window.truckDB) {
+                            clearInterval(check);
+                            resolve();
+                        }
+                    }, 100);
+                });
+            }
             await truckDB.init();
+            // Warm up the cache
+            await truckDB.getAllBookings();
 
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({
