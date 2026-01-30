@@ -158,9 +158,10 @@
                 }
 
                 // 3. Init Tesseract
-                worker = await Tesseract.createWorker(['eng', 'tha', 'lao', 'vie']);
+                worker = await Tesseract.createWorker(['eng', 'tha']);
                 await worker.setParameters({
-                    tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-กขคฆงจฉชซฌญฎฏฐฑฒณดตถทธนบปผฝพฟภมยรลวศษสหฬอฮກຂຄງຈສຊຍດຕຖທນບປຜຝພຟມຢຣລວຫອຮ. ',
+                    tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-กขคฆงจฉชซฌญฎฏฐฑฒณดตถทธนบปผฝพฟภมยรลวศษสหฬอฮ. ',
+                    tessedit_pageseg_mode: '11', // Sparse text (PSM 11) is generally faster for plates
                 });
 
                 requestAnimationFrame(scanLoop);
@@ -179,16 +180,22 @@
                 return;
             }
 
-            // Adjusted to 30% to capture 2-line Vietnamese plates
+            // Adjusted to 40% to capture dual line plates but focusing on center
             const cropW = vw * 0.92;
-            const cropH = vh * 0.30;
+            const cropH = vh * 0.40;
             const cropX = (vw - cropW) / 2;
             const cropY = (vh - cropH) / 2;
 
-            canvas.width = cropW;
-            canvas.height = cropH;
+            // Optimization: Downscale processing canvas for speed (max width 600px)
+            const targetWidth = Math.min(600, cropW);
+            const scale = targetWidth / cropW;
+            canvas.width = targetWidth;
+            canvas.height = cropH * scale;
 
-            ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+            // Image Pre-processing for better OCR
+            ctx.filter = 'grayscale(100%) contrast(150%) brightness(110%)';
+            ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, canvas.width, canvas.height);
+            ctx.filter = 'none'; // reset for next frame
 
             const { data: { text } } = await worker.recognize(canvas);
 
@@ -214,45 +221,32 @@
         function cleanupPlate(text) {
             if (!text) return null;
 
-            // 1. Substitution for common OCR errors
-            let cleanText = text.toUpperCase()
+            // 1. Clean and split into lines
+            let lines = text.toUpperCase()
                 .replace(/O/g, '0')
                 .replace(/[IL|]/g, '1')
-                .replace(/S/g, '5')
-                .replace(/B/g, '8')
-                .replace(/[^A-Z0-9ก-ฮກ-ຮ\n]/g, '');
+                .replace(/[^A-Z0-9ก-ฮ\n]/g, '')
+                .split('\n')
+                .map(l => l.trim())
+                .filter(l => l.length >= 3); // Ignore very short noise
 
-            const lines = cleanText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+            // 2. Score lines to find the "Most Likely Plate"
+            // We want lines that have a mix of letters and numbers, length 4-8
+            const scoredLines = lines.map(line => {
+                let score = 0;
+                if (line.length >= 5 && line.length <= 8) score += 10;
+                if (/[0-9]/.test(line)) score += 5;
+                if (/[ก-ฮA-Z]/.test(line)) score += 5;
+                // Bonus for standard Thai patterns (e.g. 1กข1234 or กข1234)
+                if (/^[0-9]?[ก-ฮ]{2}[0-9]{1,4}$/.test(line)) score += 20;
+                return { line, score };
+            });
 
-            // Pattern A: Multi-line Viet (e.g. 29A then 62769)
-            for (let i = 0; i < lines.length - 1; i++) {
-                const combined = lines[i] + lines[i + 1];
-                // Viet: 2 digits + 1-2 letters + 4-6 digits (e.g. 29A1234, 29LD12345)
-                const vMatch = combined.match(/\d{2}[A-Z]{1,2}\d{4,6}/);
-                if (vMatch) return vMatch[0];
-            }
+            // Sort by score descending
+            scoredLines.sort((a, b) => b.score - a.score);
 
-            for (let line of lines) {
-                if (line.length < 3 && !/^[ก-ฮກ-ຮ]/.test(line)) continue;
-
-                // Pattern B: Thai/Lao Alpha (ผถ3923, ບກ2032)
-                const alphaMatch = line.match(/[ก-ฮກ-ຮ]{2}\d{4}/);
-                if (alphaMatch) return alphaMatch[0];
-
-                // Pattern C: Thai Numeric (702030, 7002039)
-                const numMatch = line.match(/\d{6,8}/);
-                if (numMatch) return numMatch[0];
-
-                // Pattern D: Vietnamese Single Line / ALpha-Num
-                const vietMatch = line.match(/\d{2}[A-Z]{1,2}\d{4,6}/);
-                if (vietMatch) return vietMatch[0];
-            }
-
-            // Pattern E: Fuzzy Fallback (Any line with letters/digits that's 4-10 chars long)
-            for (let line of lines) {
-                if (line.length >= 4 && line.length <= 10) {
-                    if (/\d{2,}/.test(line)) return line;
-                }
+            if (scoredLines.length > 0 && scoredLines[0].score > 10) {
+                return scoredLines[0].line;
             }
 
             return null;
