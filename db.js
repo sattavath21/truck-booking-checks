@@ -1,45 +1,62 @@
-const DB_NAME = 'TMGT_Database';
-const STORE_NAME = 'LogisticsData';
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import { 
+    getFirestore, 
+    collection, 
+    getDocs, 
+    addDoc, 
+    writeBatch, 
+    query, 
+    where, 
+    orderBy, 
+    doc,
+    deleteDoc 
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+const firebaseConfig = {
+    apiKey: "AIzaSyAfRm6yu1tCk0qgWfW6UcfvcqF1zAxnoBQ",
+    authDomain: "device-streaming-70248ccc.firebaseapp.com",
+    projectId: "device-streaming-70248ccc",
+    storageBucket: "device-streaming-70248ccc.firebasestorage.app",
+    messagingSenderId: "993682748672",
+    appId: "1:993682748672:web:5bf00418b42a13c0dbafe5"
+};
+
+const COLLECTION_NAME = 'LogisticsData';
 
 class TruckDB {
     constructor() {
+        this.app = null;
         this.db = null;
     }
 
     async init() {
-        return new Promise((resolve, reject) => {
-            const request = indexedDB.open(DB_NAME, 2); // Bump version for new fields
-            request.onerror = () => reject('Database error');
-            request.onsuccess = (e) => {
-                this.db = e.target.result;
-                resolve(this.db);
-            };
-            request.onupgradeneeded = (e) => {
-                const db = e.target.result;
-                if (!db.objectStoreNames.contains(STORE_NAME)) {
-                    db.createObjectStore(STORE_NAME, { keyPath: 'id' });
-                }
-            };
-        });
+        if (!this.app) {
+            this.app = initializeApp(firebaseConfig);
+            this.db = getFirestore(this.app);
+        }
+        return this.db;
     }
 
     async getAllBookings() {
-        return new Promise((resolve) => {
-            const tx = this.db.transaction(STORE_NAME, 'readonly');
-            const store = tx.objectStore(STORE_NAME);
-            const request = store.getAll();
-            request.onsuccess = () => {
-                // Return all bookings, sorted by timestamp descending
-                const data = request.result || [];
-                resolve(data.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)));
-            };
+        const now = Date.now();
+        const threeDaysAgo = now - (3 * 24 * 60 * 60 * 1000);
+        
+        const q = query(
+            collection(this.db, COLLECTION_NAME),
+            where("timestamp", ">=", threeDaysAgo),
+            orderBy("timestamp", "desc")
+        );
+
+        const querySnapshot = await getDocs(q);
+        const data = [];
+        querySnapshot.forEach((doc) => {
+            data.push({ id: doc.id, ...doc.data() });
         });
+        return data;
     }
 
     normalize(text) {
         if (!text) return '';
-        // Remove spaces, dots, dashes, and other special characters
-        // Keep letters (English, Thai, Lao) and numbers
         return text.toString().toUpperCase()
             .replace(/[^A-Z0-9ก-ฮກ-ຮ]/g, '');
     }
@@ -55,38 +72,38 @@ class TruckDB {
     }
 
     async clearAll() {
-        return new Promise((resolve, reject) => {
-            const tx = this.db.transaction(STORE_NAME, 'readwrite');
-            const store = tx.objectStore(STORE_NAME);
-            const request = store.clear();
-            request.onsuccess = () => resolve();
-            request.onerror = () => reject('Clear failed');
+        const q = query(collection(this.db, COLLECTION_NAME));
+        const querySnapshot = await getDocs(q);
+        const batch = writeBatch(this.db);
+        
+        querySnapshot.forEach((document) => {
+            batch.delete(doc(this.db, COLLECTION_NAME, document.id));
         });
+        
+        await batch.commit();
     }
 
     async addBooking(item) {
-        return new Promise((resolve, reject) => {
-            const tx = this.db.transaction(STORE_NAME, 'readwrite');
-            const store = tx.objectStore(STORE_NAME);
-            store.put(item);
-            tx.oncomplete = () => resolve();
-            tx.onerror = () => reject('Add failed');
-        });
+        await addDoc(collection(this.db, COLLECTION_NAME), item);
     }
 
     async seedData(dataArray) {
-        return new Promise((resolve, reject) => {
-            const tx = this.db.transaction(STORE_NAME, 'readwrite');
-            const store = tx.objectStore(STORE_NAME);
-            dataArray.forEach(item => store.put(item));
-            tx.oncomplete = () => resolve();
-            tx.onerror = () => reject('Seeding failed');
-        });
+        // Firestore batch has a limit of 500 operations
+        const BATCH_SIZE = 500;
+        for (let i = 0; i < dataArray.length; i += BATCH_SIZE) {
+            const batch = writeBatch(this.db);
+            const chunk = dataArray.slice(i, i + BATCH_SIZE);
+            chunk.forEach(item => {
+                const docRef = doc(collection(this.db, COLLECTION_NAME));
+                batch.set(docRef, item);
+            });
+            await batch.commit();
+        }
     }
 
-    // This makes it easy to switch to a Cloud DB later
     async syncFromCloud() {
-        console.log('Cloud sync not implemented yet. Using Local Storage.');
+        // Now it's already cloud-first!
+        console.log('Using Firestore Cloud Database.');
     }
 }
 

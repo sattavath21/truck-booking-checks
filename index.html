@@ -25,7 +25,8 @@
 
         <main>
             <div class="search-box">
-                <input type="text" id="searchInput" placeholder="Search by truck plate..." autocomplete="off">
+                <input type="text" id="searchInput" inputmode="numeric" placeholder="Search by truck plate..."
+                    autocomplete="off">
             </div>
 
             <div class="upload-section">
@@ -63,7 +64,7 @@
         </main>
     </div>
 
-    <script src="db.js"></script>
+    <script type="module" src="db.js"></script>
     <script src="mockData.js"></script>
     <script>
         const tableBody = document.getElementById('bookingTable');
@@ -72,6 +73,17 @@
         const fileLabel = document.getElementById('fileLabel');
 
         async function initPage() {
+            // Wait for truckDB to be initialized if it's not yet (since it's a module)
+            if (!window.truckDB) {
+                await new Promise(resolve => {
+                    const check = setInterval(() => {
+                        if (window.truckDB) {
+                            clearInterval(check);
+                            resolve();
+                        }
+                    }, 100);
+                });
+            }
             await truckDB.init();
             renderTable();
 
