@@ -119,28 +119,45 @@
         let worker = null;
 
         async function initCamera() {
-            // Wait for truckDB to be initialized if it's not yet (since it's a module)
-            if (!window.truckDB) {
-                await new Promise(resolve => {
-                    const check = setInterval(() => {
-                        if (window.truckDB) {
-                            clearInterval(check);
-                            resolve();
-                        }
-                    }, 100);
-                });
-            }
-            await truckDB.init();
-            // Warm up the cache
-            await truckDB.getAllBookings();
-
+            // 1. Start Camera Immediately
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({
                     video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
                 });
                 video.srcObject = stream;
+            } catch (err) {
+                console.error('Camera permission/access error:', err);
+                alert('Camera error: ' + err.message);
+                return;
+            }
 
-                // Init Tesseract
+            // 2. Initialize Database in background (don't block the camera display)
+            try {
+                if (!window.truckDB) {
+                    await new Promise(resolve => {
+                        const check = setInterval(() => {
+                            if (window.truckDB) {
+                                clearInterval(check);
+                                resolve();
+                            }
+                        }, 100);
+                        // Timeout after 5 seconds
+                        setTimeout(() => {
+                            clearInterval(check);
+                            resolve();
+                        }, 5000);
+                    });
+                }
+
+                if (window.truckDB) {
+                    await window.truckDB.init();
+                    // Warm up cache but don't strictly wait for it if it takes too long
+                    window.truckDB.getAllBookings().catch(e => console.error("Cache warm-up failed:", e));
+                } else {
+                    console.error("truckDB failed to load within timeout");
+                }
+
+                // 3. Init Tesseract
                 worker = await Tesseract.createWorker(['eng', 'tha', 'lao', 'vie']);
                 await worker.setParameters({
                     tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-กขคฆงจฉชซฌญฎฏฐฑฒณดตถทธนบปผฝพฟภมยรลวศษสหฬอฮກຂຄງຈສຊຍດຕຖທນບປຜຝພຟມຢຣລວຫອຮ. ',
@@ -148,7 +165,7 @@
 
                 requestAnimationFrame(scanLoop);
             } catch (err) {
-                alert('Camera error: ' + err.message);
+                console.error('OCR/DB initialization error:', err);
             }
         }
 
