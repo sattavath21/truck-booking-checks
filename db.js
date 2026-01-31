@@ -51,11 +51,11 @@ class TruckDB {
             return this.cache.slice(0, rowLimit);
         }
 
-        const threeDaysAgo = now - (3 * 24 * 60 * 60 * 1000);
+        const sevenDaysAgo = now - (7 * 24 * 60 * 60 * 1000);
 
         const q = query(
             collection(this.db, COLLECTION_NAME),
-            where("timestamp", ">=", threeDaysAgo),
+            where("timestamp", ">=", sevenDaysAgo),
             orderBy("timestamp", "desc"),
             limit(1000) // Fetch more than requested for cache
         );
@@ -85,13 +85,12 @@ class TruckDB {
         if (!plate) return [];
         const target = this.normalize(plate);
 
-        // Always try to use cache for search to save reads, especially for OCR
-        const all = await this.getAllBookings();
-        return all.find(b => {
+        // Search within a much larger set (1000) to ensure we find it
+        const all = await this.getAllBookings(1000);
+        return all.filter(b => {
             const bTruck = this.normalize(b.truck);
-            return bTruck === target;
+            return bTruck.includes(target);
         });
-        return data;
     }
 
     async clearAll() {

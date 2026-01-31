@@ -274,6 +274,11 @@
                 bookings = await truckDB.getAllBookings(currentLimit, forceRefresh);
             }
 
+            // Ensure bookings is an array before processing
+            if (!Array.isArray(bookings)) {
+                bookings = [];
+            }
+
             // Group by truck plate to find re-entries in the fetched set
             // Wait, if users selected 5, we only have 5. Re-entry detection 
             // works best on the fetched set.
