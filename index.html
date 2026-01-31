@@ -49,8 +49,6 @@
                 <select id="rowLimit" class="nav-btn" style="padding: 2px 8px; border-radius: 8px; font-size: 0.75rem;">
                     <option value="5">5 rows</option>
                     <option value="10" selected>10 rows</option>
-                    <option value="50">50 rows</option>
-                    <option value="100">100 rows</option>
                 </select>
             </div>
 
@@ -266,16 +264,14 @@
 
         async function renderTable(filter = '', forceRefresh = false) {
             const currentLimit = parseInt(document.getElementById('rowLimit').value) || 10;
-            const bookings = await truckDB.getAllBookings(currentLimit, forceRefresh);
             const normalizedFilter = truckDB.normalize(filter);
-
             let bookings = [];
             if (normalizedFilter) {
                 // If searching, use direct Firestore search
                 bookings = await truckDB.searchPlate(filter);
             } else {
                 // If not searching, just get latest with limit
-                bookings = await truckDB.getAllBookings(currentLimit);
+                bookings = await truckDB.getAllBookings(currentLimit, forceRefresh);
             }
 
             // Group by truck plate to find re-entries in the fetched set
