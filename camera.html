@@ -108,7 +108,7 @@
 
     <canvas id="canvas" style="display:none;"></canvas>
 
-    <script src="db.js"></script>
+    <script type="module" src="db.js"></script>
     <script>
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
@@ -123,23 +123,55 @@
         let worker = null;
 
         async function initCamera() {
-            await truckDB.init();
-
+            // 1. Start Camera Immediately
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({
                     video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
                 });
                 video.srcObject = stream;
+            } catch (err) {
+                console.error('Camera permission/access error:', err);
+                alert('Camera error: ' + err.message);
+                return;
+            }
 
-                // Init Tesseract
-                worker = await Tesseract.createWorker(['eng', 'tha', 'lao', 'vie']);
+            // 2. Initialize Database in background (don't block the camera display)
+            try {
+                if (!window.truckDB) {
+                    await new Promise(resolve => {
+                        const check = setInterval(() => {
+                            if (window.truckDB) {
+                                clearInterval(check);
+                                resolve();
+                            }
+                        }, 100);
+                        // Timeout after 5 seconds
+                        setTimeout(() => {
+                            clearInterval(check);
+                            resolve();
+                        }, 5000);
+                    });
+                }
+
+                if (window.truckDB) {
+                    await window.truckDB.init();
+                    // Warm up cache but don't strictly wait for it if it takes too long
+                    window.truckDB.getAllBookings().catch(e => console.error("Cache warm-up failed:", e));
+                } else {
+                    console.error("truckDB failed to load within timeout");
+                }
+
+                // 3. Init Tesseract
+                // 3. Init Tesseract - Reduced languages to just eng+tha+lao for faster processing
+                worker = await Tesseract.createWorker(['eng', 'tha', 'lao']);
                 await worker.setParameters({
                     tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-กขคฆงจฉชซฌญฎฏฐฑฒณดตถทธนบปผฝพฟภมยรลวศษสหฬอฮກຂຄງຈສຊຍດຕຖທນບປຜຝພຟມຢຣລວຫອຮ. ',
+                    tessedit_pageseg_mode: '11', // Sparse text (PSM 11) is generally faster for plates
                 });
 
                 requestAnimationFrame(scanLoop);
             } catch (err) {
-                alert('Camera error: ' + err.message);
+                console.error('OCR/DB initialization error:', err);
             }
         }
 
@@ -153,16 +185,22 @@
                 return;
             }
 
-            // Adjusted to 30% to capture 2-line Vietnamese plates
+            // Adjusted to 40% to capture dual line plates but focusing on center
             const cropW = vw * 0.92;
-            const cropH = vh * 0.30;
+            const cropH = vh * 0.40;
             const cropX = (vw - cropW) / 2;
             const cropY = (vh - cropH) / 2;
 
-            canvas.width = cropW;
-            canvas.height = cropH;
+            // Optimization: Downscale processing canvas for speed (max width 600px)
+            const targetWidth = Math.min(600, cropW);
+            const scale = targetWidth / cropW;
+            canvas.width = targetWidth;
+            canvas.height = cropH * scale;
 
-            ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+            // Image Pre-processing for better OCR
+            ctx.filter = 'grayscale(100%) contrast(150%) brightness(110%)';
+            ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, canvas.width, canvas.height);
+            ctx.filter = 'none'; // reset for next frame
 
             const { data: { text } } = await worker.recognize(canvas);
 
@@ -188,45 +226,45 @@
         function cleanupPlate(text) {
             if (!text) return null;
 
-            // 1. Substitution for common OCR errors
-            let cleanText = text.toUpperCase()
+            // 1. Clean and split into lines
+            let rawLines = text.toUpperCase()
                 .replace(/O/g, '0')
                 .replace(/[IL|]/g, '1')
-                .replace(/S/g, '5')
-                .replace(/B/g, '8')
-                .replace(/[^A-Z0-9ก-ฮກ-ຮ\n]/g, '');
+                .split('\n');
 
-            const lines = cleanText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+            const scoredLines = rawLines.map(rawLine => {
+                // Keep only allowed chars for counting/processing
+                const line = rawLine.replace(/[^A-Z0-9ก-ฮກ-ຮ]/g, '');
+                if (line.length < 3) return { line, score: -1 };
 
-            // Pattern A: Multi-line Viet (e.g. 29A then 62769)
-            for (let i = 0; i < lines.length - 1; i++) {
-                const combined = lines[i] + lines[i + 1];
-                // Viet: 2 digits + 1-2 letters + 4-6 digits (e.g. 29A1234, 29LD12345)
-                const vMatch = combined.match(/\d{2}[A-Z]{1,2}\d{4,6}/);
-                if (vMatch) return vMatch[0];
-            }
+                // Count specific character types to filter noise/province names
+                const thaiChars = (line.match(/[ก-ฮ]/g) || []).length;
+                const engChars = (line.match(/[A-Z]/g) || []).length;
+                const laoChars = (line.match(/[ກ-ຮ]/g) || []).length;
 
-            for (let line of lines) {
-                if (line.length < 3 && !/^[ก-ฮກ-ຮ]/.test(line)) continue;
+                // User restrictions: limit alphas to force focus on "ID" part of plate
+                if (thaiChars > 3) return { line, score: -1 }; // e.g. "กรุงเทพมหานคร"
+                if (engChars > 2) return { line, score: -1 };  // e.g. "LOGISTICS"
+                if (laoChars > 2) return { line, score: -1 };
 
-                // Pattern B: Thai/Lao Alpha (ผถ3923, ບກ2032)
-                const alphaMatch = line.match(/[ก-ฮກ-ຮ]{2}\d{4}/);
-                if (alphaMatch) return alphaMatch[0];
+                let score = 0;
+                // Preferred length for a plate ID is 4-8 chars
+                if (line.length >= 4 && line.length <= 8) score += 10;
+                if (/[0-9]/.test(line)) score += 5;
+                if (thaiChars > 0 || engChars > 0 || laoChars > 0) score += 5;
 
-                // Pattern C: Thai Numeric (702030, 7002039)
-                const numMatch = line.match(/\d{6,8}/);
-                if (numMatch) return numMatch[0];
+                // Bonus for standard patterns
+                if (/^[0-9]?[ก-ฮ]{2}[0-9]{1,4}$/.test(line)) score += 20; // Thai Main
+                if (/^[ກ-ຮ]{2}[0-9]{4}$/.test(line)) score += 20;        // Lao Main
 
-                // Pattern D: Vietnamese Single Line / ALpha-Num
-                const vietMatch = line.match(/\d{2}[A-Z]{1,2}\d{4,6}/);
-                if (vietMatch) return vietMatch[0];
-            }
+                return { line, score };
+            }).filter(item => item.score > 0);
 
-            // Pattern E: Fuzzy Fallback (Any line with letters/digits that's 4-10 chars long)
-            for (let line of lines) {
-                if (line.length >= 4 && line.length <= 10) {
-                    if (/\d{2,}/.test(line)) return line;
-                }
+            // Sort by score descending
+            scoredLines.sort((a, b) => b.score - a.score);
+
+            if (scoredLines.length > 0) {
+                return scoredLines[0].line;
             }
 
             return null;

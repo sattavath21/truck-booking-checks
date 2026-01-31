@@ -98,8 +98,6 @@
             await truckDB.init();
             renderTable();
 
-            renderTable();
-
             // Debounce search to save quota
             let searchTimeout;
             searchInput.addEventListener('input', () => {
@@ -121,7 +119,7 @@
                     wipeBtn.innerText = '⏳ WIPING...';
                     await truckDB.clearAll();
                     wipeBtn.innerText = '🗑️ DATA WIPED';
-                    renderTable();
+                    renderTable('', true);
                     setTimeout(() => {
                         wipeBtn.innerText = '🗑️ WIPE ALL DATA';
                         wipeBtn.disabled = false;
@@ -232,7 +230,7 @@
                     await processFile(file);
                 }
                 fileLabel.innerText = `✅ SUCCESS: ${totalAdded} BOOKINGS ADDED`;
-                renderTable();
+                renderTable('', true);
                 setTimeout(() => { fileLabel.innerText = "📁 Upload Bookings (Select Multiple)"; }, 5000);
             } catch (err) {
                 console.error(err);
@@ -250,7 +248,11 @@
             }
             try {
                 await truckDB.updateBooking(id, { status: 'Passed' });
-                renderTable(searchInput.value);
+                // We DON'T need forceRefresh here because we just updated one item
+                // and the local cache will be stale but the user is just seeing the Pass state.
+                // However, for consistency we might want to refresh if we want accuracy.
+                // For now, let's just refresh normally.
+                renderTable(searchInput.value, true);
             } catch (err) {
                 console.error("markPassed error:", err);
                 alert(`Failed to update status: ${err.message || "Unknown error"}`);
@@ -262,8 +264,9 @@
         }
         window.markPassed = markPassed;
 
-        async function renderTable(filter = '') {
+        async function renderTable(filter = '', forceRefresh = false) {
             const currentLimit = parseInt(document.getElementById('rowLimit').value) || 10;
+            const bookings = await truckDB.getAllBookings(currentLimit, forceRefresh);
             const normalizedFilter = truckDB.normalize(filter);
 
             let bookings = [];
