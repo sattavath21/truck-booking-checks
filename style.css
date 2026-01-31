@@ -279,7 +279,7 @@ tr:last-child td {
 .badge-empty {
     background: rgba(148, 163, 184, 0.25);
     /* gray */
-    color: #475569;
+    color: #b4b4b4;
 }
 
 /* CONSOL = half-pay, shared load (between info & success) */

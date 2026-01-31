@@ -82,23 +82,20 @@ class TruckDB {
     }
 
     async searchPlate(plate) {
-        if (!plate) return null;
+        if (!plate) return [];
         const target = this.normalize(plate);
 
         // Search within a much larger set (1000) to ensure we find it
         const all = await this.getAllBookings(1000);
 
         // Find exact match first (after normalization)
-        const match = all.find(b => this.normalize(b.truck) === target);
-        if (match) return match;
+        const exactMatch = all.find(b => this.normalize(b.truck) === target);
+        if (exactMatch) return [exactMatch];
 
-        // If no exact match and plate is long enough, try inclusive search
-        // (but only if plate is at least 4 chars to avoid junk matches)
-        if (target.length >= 4) {
-            return all.find(b => this.normalize(b.truck).includes(target));
-        }
-
-        return null;
+        // If no exact match, return all records that contain the target string
+        // This makes search "fucking work" for snippets like 701374
+        const partialMatches = all.filter(b => this.normalize(b.truck).includes(target));
+        return partialMatches;
     }
 
     async toggleBookingStatus(id, currentStatus) {

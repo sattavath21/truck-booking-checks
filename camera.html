@@ -271,15 +271,15 @@
         }
 
         async function checkDatabase(plate) {
-            // First try: Exact match (normalized)
-            let found = await truckDB.searchPlate(plate);
+            // First try: Normal search (now returns array)
+            let matches = await truckDB.searchPlate(plate);
+            let found = matches.length > 0 ? matches[0] : null;
 
             // Second try: Aggressive Noise Removal
-            // If plate is long (5+ chars), try stripping the first character.
-            // This handles things like 043H12345 or 129A67890
             if (!found && plate.length >= 5) {
                 const suffix = plate.substring(1);
-                found = await truckDB.searchPlate(suffix);
+                let suffixMatches = await truckDB.searchPlate(suffix);
+                found = suffixMatches.length > 0 ? suffixMatches[0] : null;
                 if (found) {
                     plateDisplay.innerText = suffix + " (AUTO-FIXED)";
                 }
