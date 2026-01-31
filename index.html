@@ -258,6 +258,19 @@
         }
         window.toggleEntry = toggleEntry;
 
+        function getShipmentClass(type) {
+            switch (type) {
+                case 'FCL':
+                    return 'badge-fcl';        // Full load
+                case 'EMPTY':
+                    return 'badge-empty';      // Empty container
+                case 'CONSOL':
+                    return 'badge-consol';     // Consolidated (half-pay)
+                default:
+                    return 'badge-default';
+            }
+        }
+
         async function renderTable(filter = '', forceRefresh = false) {
             const currentLimit = parseInt(document.getElementById('rowLimit').value) || 10;
             const normalizedFilter = truckDB.normalize(filter);
@@ -359,7 +372,11 @@
                     </td>
                     <td>
                         <div style="font-size: 0.8rem; font-weight: 600;">${b.customer}</div>
-                        ${b.shipmentType && b.shipmentType !== '-' ? `<div class="badge-shipment bg-info">${b.shipmentType}</div>` : ''}
+                        ${b.shipmentType && b.shipmentType !== '-' ? `
+                            <div class="badge-shipment ${getShipmentClass(b.shipmentType)}">
+                                ${b.shipmentType}
+                            </div>
+                        ` : ''}
                     </td>
                     <td>
                         <div class="size-cell">

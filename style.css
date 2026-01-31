@@ -265,6 +265,35 @@ tr:last-child td {
     font-weight: 600;
     display: inline-block;
     margin-top: 4px;
+    letter-spacing: 0.3px;
+}
+
+/* FCL = Full load (strong, confident) */
+.badge-fcl {
+    background: rgba(34, 197, 94, 0.18);
+    /* green */
+    color: #16a34a;
+}
+
+/* EMPTY = no cargo (neutral / warning-ish) */
+.badge-empty {
+    background: rgba(148, 163, 184, 0.25);
+    /* gray */
+    color: #475569;
+}
+
+/* CONSOL = half-pay, shared load (between info & success) */
+.badge-consol {
+    background: rgba(56, 189, 248, 0.18);
+    /* blue */
+    color: #0284c7;
+    border: 1px dashed rgba(2, 132, 199, 0.6);
+}
+
+/* fallback */
+.badge-default {
+    background: rgba(56, 189, 248, 0.15);
+    color: var(--accent);
 }
 
 /* Camera UI */
