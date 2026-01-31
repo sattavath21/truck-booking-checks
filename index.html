@@ -237,30 +237,26 @@
             }
         }
 
-        async function markPassed(id) {
-            console.log("Marking as passed:", id);
+        async function toggleEntry(id, currentStatus) {
+            console.log("Toggling entry status:", id, currentStatus);
             const btn = document.querySelector(`button[data-id="${id}"]`);
             if (btn) {
                 btn.disabled = true;
                 btn.innerText = '⏳ ...';
             }
             try {
-                await truckDB.updateBooking(id, { status: 'Passed' });
-                // We DON'T need forceRefresh here because we just updated one item
-                // and the local cache will be stale but the user is just seeing the Pass state.
-                // However, for consistency we might want to refresh if we want accuracy.
-                // For now, let's just refresh normally.
+                await truckDB.toggleBookingStatus(id, currentStatus);
                 renderTable(searchInput.value, true);
             } catch (err) {
-                console.error("markPassed error:", err);
+                console.error("toggleEntry error:", err);
                 alert(`Failed to update status: ${err.message || "Unknown error"}`);
                 if (btn) {
                     btn.disabled = false;
-                    btn.innerText = 'Mark as Entry';
+                    btn.innerText = currentStatus === 'Passed' ? 'Undo Entry' : 'Mark as Entry';
                 }
             }
         }
-        window.markPassed = markPassed;
+        window.toggleEntry = toggleEntry;
 
         async function renderTable(filter = '', forceRefresh = false) {
             const currentLimit = parseInt(document.getElementById('rowLimit').value) || 10;
@@ -345,13 +341,14 @@
                                 </div>
                             ` : ''}
 
-                            ${isPassed ? `
-                                <div class="chip-group">
-                                    <span class="status-badge badge-passed">✅ PASSED</span>
-                                </div>
-                            ` : `
-                                <button class="mark-btn" data-id="${b.id}" onclick="markPassed('${b.id}')">Mark as Entry</button>
-                            `}
+                            <div class="chip-group">
+                                <button class="mark-btn ${isPassed ? 'badge-passed' : ''}" 
+                                        style="${isPassed ? 'border:none; margin-top:4px;' : ''}"
+                                        data-id="${b.id}" 
+                                        onclick="toggleEntry('${b.id}', '${b.status}')">
+                                    ${isPassed ? '✅ PASSED (Undo)' : 'Mark as Entry'}
+                                </button>
+                            </div>
 
                             ${b.container && b.container !== '-' ? `
                                 <div class="chip-group">
@@ -362,7 +359,7 @@
                     </td>
                     <td>
                         <div style="font-size: 0.8rem; font-weight: 600;">${b.customer}</div>
-                        ${b.shipmentType && b.shipmentType !== '-' ? `<div style="font-size: 0.75rem; color: var(--text-muted);">${b.shipmentType}</div>` : ''}
+                        ${b.shipmentType && b.shipmentType !== '-' ? `<div class="badge-shipment bg-info">${b.shipmentType}</div>` : ''}
                     </td>
                     <td>
                         <div class="size-cell">

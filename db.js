@@ -82,15 +82,28 @@ class TruckDB {
     }
 
     async searchPlate(plate) {
-        if (!plate) return [];
+        if (!plate) return null;
         const target = this.normalize(plate);
 
         // Search within a much larger set (1000) to ensure we find it
         const all = await this.getAllBookings(1000);
-        return all.filter(b => {
-            const bTruck = this.normalize(b.truck);
-            return bTruck.includes(target);
-        });
+
+        // Find exact match first (after normalization)
+        const match = all.find(b => this.normalize(b.truck) === target);
+        if (match) return match;
+
+        // If no exact match and plate is long enough, try inclusive search
+        // (but only if plate is at least 4 chars to avoid junk matches)
+        if (target.length >= 4) {
+            return all.find(b => this.normalize(b.truck).includes(target));
+        }
+
+        return null;
+    }
+
+    async toggleBookingStatus(id, currentStatus) {
+        const newStatus = currentStatus === 'Passed' ? 'Pending' : 'Passed';
+        return this.updateBooking(id, { status: newStatus });
     }
 
     async clearAll() {

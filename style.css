@@ -253,6 +253,20 @@ tr:last-child td {
     color: #fbbf24;
 }
 
+.bg-info {
+    background: rgba(56, 189, 248, 0.15);
+    color: var(--accent);
+}
+
+.badge-shipment {
+    font-size: 0.7rem;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-weight: 600;
+    display: inline-block;
+    margin-top: 4px;
+}
+
 /* Camera UI */
 .camera-container {
     position: relative;
