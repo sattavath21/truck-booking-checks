@@ -59,7 +59,7 @@
                     <thead>
                         <tr>
                             <th>Truck / Container</th>
-                            <th>Customer</th>
+                            <th>Customer / Shipment Type</th>
                             <th>Size / Remark</th>
                         </tr>
                     </thead>
@@ -188,23 +188,27 @@
                                 const csKey = findColFuzzy(row, ['CONTAINER / SIZE*', 'CONTAINER / SIZE', 'Container Size']);
                                 const remKey = findColFuzzy(row, ['Remark', 'REMARK']);
                                 const jobKey = findColFuzzy(row, ['Job  No.', 'JobNo']);
+                                const shipTypeKey = findColFuzzy(row, ['Shipment Type']);
+                                const customerKey = findColFuzzy(row, ['Customer Name', 'Customer']);
+                                const trailerKey = findColFuzzy(row, ['Trailer In No.', 'Trailer No.']);
 
                                 let contVal = contOutKey ? clean(row[contOutKey]) : '-';
                                 if (contVal === '-') {
                                     contVal = contInKey ? clean(row[contInKey]) : '-';
                                 }
 
-                                const jobVal = clean(row[jobKey]);
+                                const shipmentType = clean(row[shipTypeKey]);
+
                                 return {
-                                    id: `${truck}_${jobVal}`.replace(/\s/g, '_'),
-                                    job: jobVal,
                                     truck: truck,
-                                    trailer: clean(row[findColFuzzy(row, ['Trailer In No.', 'Trailer No.'])]),
+                                    truck_norm: truckDB.normalize(truck),
+                                    trailer: clean(row[trailerKey]),
                                     container: contVal,
                                     truckSize: tsKey ? clean(row[tsKey]) : '-',
                                     containerSize: csKey ? clean(row[csKey]) : '-',
                                     remark: remKey ? clean(row[remKey]) : '-',
-                                    customer: clean(row[findColFuzzy(row, ['Customer Name', 'Customer'])]),
+                                    customer: clean(row[customerKey]),
+                                    shipmentType: shipmentType,
                                     status: 'Pending',
                                     uploadedDate: uploadDate,
                                     timestamp: Date.now()
@@ -260,11 +264,20 @@
 
         async function renderTable(filter = '') {
             const currentLimit = parseInt(document.getElementById('rowLimit').value) || 10;
-            const bookings = await truckDB.getAllBookings(currentLimit);
             const normalizedFilter = truckDB.normalize(filter);
 
-            // Group by truck plate to find re-entries
-            // Sort by timestamp asc so we know which one is first
+            let bookings = [];
+            if (normalizedFilter) {
+                // If searching, use direct Firestore search
+                bookings = await truckDB.searchPlate(filter);
+            } else {
+                // If not searching, just get latest with limit
+                bookings = await truckDB.getAllBookings(currentLimit);
+            }
+
+            // Group by truck plate to find re-entries in the fetched set
+            // Wait, if users selected 5, we only have 5. Re-entry detection 
+            // works best on the fetched set.
             const grouped = {};
             bookings.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0)).forEach(b => {
                 const norm = truckDB.normalize(b.truck);
@@ -286,17 +299,20 @@
             // Re-sort for display (desc by timestamp)
             const sortedBookings = [...bookings].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
-            const filtered = sortedBookings.filter(b => {
-                const bTruck = truckDB.normalize(b.truck);
-                return bTruck.includes(normalizedFilter);
-            });
+            const filtered = normalizedFilter
+                ? sortedBookings.filter(b => truckDB.normalize(b.truck).includes(normalizedFilter))
+                : sortedBookings;
 
-            if (filtered.length === 0) {
+            // Only show up to currentLimit if not searching (though query already limited it)
+            // But if searching, we might want to show all matches found.
+            const displayList = normalizedFilter ? filtered : filtered.slice(0, currentLimit);
+
+            if (displayList.length === 0) {
                 tableBody.innerHTML = `<tr><td colspan="3" style="text-align:center; padding: 40px; color: var(--text-muted);">No bookings found</td></tr>`;
                 return;
             }
 
-            tableBody.innerHTML = filtered.map(b => {
+            tableBody.innerHTML = displayList.map(b => {
                 const reentryIdx = reentryMap.get(b.id);
                 const isPassed = b.status === 'Passed';
 
@@ -340,7 +356,10 @@
                             ` : ''}
                         </div>
                     </td>
-                    <td><div style="font-size: 0.8rem">${b.customer}</div></td>
+                    <td>
+                        <div style="font-size: 0.8rem; font-weight: 600;">${b.customer}</div>
+                        ${b.shipmentType && b.shipmentType !== '-' ? `<div style="font-size: 0.75rem; color: var(--text-muted);">${b.shipmentType}</div>` : ''}
+                    </td>
                     <td>
                         <div class="size-cell">
                             <div class="chip-group" style="justify-content: flex-end; margin-bottom: 4px; gap: 2px">

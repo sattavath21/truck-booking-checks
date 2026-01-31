@@ -39,7 +39,7 @@ class TruckDB {
         return this.db;
     }
 
-    async getAllBookings(rowLimit = 100) {
+    async getAllBookings(rowLimit = 10) {
         const now = Date.now();
         const threeDaysAgo = now - (3 * 24 * 60 * 60 * 1000);
 
@@ -54,8 +54,6 @@ class TruckDB {
         const data = [];
         querySnapshot.forEach((doc) => {
             const itemData = doc.data();
-            // Ensure Firestore's document ID is what we use as the 'id', 
-            // even if the data contains an 'id' field.
             data.push({ ...itemData, id: doc.id });
         });
         return data;
@@ -63,18 +61,29 @@ class TruckDB {
 
     normalize(text) {
         if (!text) return '';
+        // Same normalization as before for consistency
         return text.toString().toUpperCase()
             .replace(/[^A-Z0-9ก-ฮก-ຮ]/g, '');
     }
 
     async searchPlate(plate) {
-        if (!plate) return null;
+        if (!plate) return [];
         const target = this.normalize(plate);
-        const all = await this.getAllBookings();
-        return all.find(b => {
-            const bTruck = this.normalize(b.truck);
-            return bTruck === target;
+
+        // Use direct Firestore query for efficiency
+        const q = query(
+            collection(this.db, COLLECTION_NAME),
+            where("truck_norm", "==", target),
+            orderBy("timestamp", "desc"),
+            limit(50) // Return enough results for search
+        );
+
+        const querySnapshot = await getDocs(q);
+        const data = [];
+        querySnapshot.forEach((doc) => {
+            data.push({ ...doc.data(), id: doc.id });
         });
+        return data;
     }
 
     async clearAll() {

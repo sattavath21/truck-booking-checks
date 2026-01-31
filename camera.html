@@ -42,9 +42,13 @@
 
                 <div id="resultCard"
                     style="display:none; background: var(--glass); padding: 20px; border-radius: 16px; margin-bottom: 20px; text-align: left; border-left: 4px solid var(--success);">
-                    <div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 12px;">CUSTOMER</div>
+                    <div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 12px;">CUSTOMER / SHIPMENT
+                        TYPE</div>
                     <div id="resCustomer"
                         style="font-size: 1.1rem; font-weight: 700; margin-bottom: 16px; line-height: 1.2;">-</div>
+                    <div id="resShipmentType"
+                        style="font-size: 0.9rem; font-weight: 600; color: var(--text-muted); margin-top: -12px; margin-bottom: 16px;">
+                        -</div>
 
                     <div class="plate-cell">
                         <!-- Truck & Trailer Card (Stacked) -->
@@ -267,6 +271,7 @@
             const remark = clean(data.remark);
 
             document.getElementById('resCustomer').innerText = data.customer || '-';
+            document.getElementById('resShipmentType').innerText = data.shipmentType || '-';
             document.getElementById('resTruck').innerText = truck;
 
             // Trailer
