@@ -126,9 +126,9 @@ th {
 }
 
 td {
-    padding: 12px 12px;
+    padding: 10px 8px;
     border-bottom: 1px solid #e2e8f0;
-    font-size: 0.85rem;
+    font-size: 0.75rem;
 }
 
 tr:last-child td {
@@ -184,8 +184,8 @@ tr:last-child td {
 .chip {
     display: inline-flex;
     align-items: center;
-    padding: 6px 10px;
-    font-size: 0.8rem;
+    padding: 5px 8px;
+    font-size: 0.7rem;
     font-weight: 700;
     letter-spacing: 0.02em;
     white-space: nowrap;
@@ -231,16 +231,16 @@ tr:last-child td {
 .status-badge {
     display: inline-flex;
     align-items: center;
-    padding: 6px 10px;
+    padding: 5px 8px;
     border-radius: 8px;
-    font-size: 0.8rem;
+    font-size: 0.7rem;
     font-weight: 700;
     letter-spacing: 0.02em;
     white-space: nowrap;
 }
 
 .badge-label {
-    font-size: 0.6rem;
+    font-size: 0.55rem;
     text-transform: uppercase;
     opacity: 0.7;
     margin-right: 4px;
@@ -263,8 +263,8 @@ tr:last-child td {
 }
 
 .badge-shipment {
-    font-size: 0.75rem;
-    padding: 4px 10px;
+    font-size: 0.7rem;
+    padding: 3px 8px;
     border-radius: 6px;
     font-weight: 800;
     display: inline-block;
@@ -433,12 +433,12 @@ tr:last-child td {
 }
 
 .upload-date {
-    font-size: 0.65rem;
-    color: var(--text-muted);
+    font-size: 0.75rem;
+    color: var(--text-main);
     text-align: right;
     display: block;
     margin-top: 4px;
-    font-weight: 600;
+    font-weight: 700;
 }
 
 .badge-reentry {
@@ -453,9 +453,9 @@ tr:last-child td {
     background: white;
     border: 2px solid #cbd5e1;
     color: var(--text-main);
-    padding: 6px 12px;
+    padding: 5px 10px;
     border-radius: 8px;
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     font-weight: 700;
     cursor: pointer;
     transition: all 0.2s;

@@ -24,10 +24,12 @@
         </header>
 
         <main>
-            <div class="search-box">
+            <form class="search-box" id="searchForm" style="display: flex; gap: 8px;">
                 <input type="text" id="searchInput" inputmode="numeric" placeholder="Search by truck plate..."
-                    autocomplete="off">
-            </div>
+                    autocomplete="off" style="flex: 1;">
+                <button type="submit" class="nav-btn" style="padding: 12px 20px; white-space: nowrap;">🔍
+                    Search</button>
+            </form>
 
             <div class="upload-section">
                 <div class="upload-controls">
@@ -94,15 +96,13 @@
                 });
             }
             await truckDB.init();
-            renderTable();
+            renderTable(); // This will now show the prompt instead of fetching
 
-            // Debounce search to save quota
-            let searchTimeout;
-            searchInput.addEventListener('input', () => {
-                clearTimeout(searchTimeout);
-                searchTimeout = setTimeout(() => {
-                    renderTable(searchInput.value);
-                }, 400); // 400ms delay
+            // Handle search form submission
+            const searchForm = document.getElementById('searchForm');
+            searchForm.addEventListener('submit', (e) => {
+                e.preventDefault(); // Prevent page reload
+                renderTable(searchInput.value);
             });
 
             const rowLimit = document.getElementById('rowLimit');
@@ -111,19 +111,21 @@
             });
 
             const wipeBtn = document.getElementById('wipeBtn');
-            wipeBtn.addEventListener('click', async () => {
-                if (confirm('Are you sure you want to WIPE ALL bookings? This cannot be undone.')) {
-                    wipeBtn.disabled = true;
-                    wipeBtn.innerText = '⏳ WIPING...';
-                    await truckDB.clearAll();
-                    wipeBtn.innerText = '🗑️ DATA WIPED';
-                    renderTable('', true);
-                    setTimeout(() => {
-                        wipeBtn.innerText = '🗑️ WIPE ALL DATA';
-                        wipeBtn.disabled = false;
-                    }, 3000);
-                }
-            });
+            if (wipeBtn) {
+                wipeBtn.addEventListener('click', async () => {
+                    if (confirm('Are you sure you want to WIPE ALL bookings? This cannot be undone.')) {
+                        wipeBtn.disabled = true;
+                        wipeBtn.innerText = '⏳ WIPING...';
+                        await truckDB.clearAll();
+                        wipeBtn.innerText = '🗑️ DATA WIPED';
+                        renderTable('', true);
+                        setTimeout(() => {
+                            wipeBtn.innerText = '🗑️ WIPE ALL DATA';
+                            wipeBtn.disabled = false;
+                        }, 3000);
+                    }
+                });
+            }
 
             excelUpload.addEventListener('change', handleExcel);
         }
@@ -147,8 +149,6 @@
                             const sheet = workbook.Sheets[sheetName];
                             const rows = XLSX.utils.sheet_to_json(sheet, { range: 3 });
 
-                            const uploadDate = new Date().toLocaleString();
-
                             const findColFuzzy = (row, targets) => {
                                 const keys = Object.keys(row);
                                 const cleanStr = (s) => s.toString().toLowerCase().replace(/\s/g, '');
@@ -169,11 +169,17 @@
 
                             const clean = (val) => {
                                 if (val === undefined || val === null) return '-';
+                                // Force to string and remove any trailing .0 for numbers
                                 let s = val.toString().trim();
+                                if (/^\d+\.0$/.test(s)) s = s.split('.')[0];
                                 return (s.toLowerCase() === 'nan' || s === '' || s.toLowerCase() === 'none') ? '-' : s;
                             };
 
-                            const newBookings = rows.map(row => {
+                            const now = new Date();
+                            const uploadDate = `${now.getDate().toString().padStart(2, '0')}/${(now.getMonth() + 1).toString().padStart(2, '0')}/${now.getFullYear()}`;
+
+                            console.log(`Excel: Found ${rows.length} total rows in sheet. Mapping...`);
+                            const newBookings = rows.map((row, idx) => {
                                 const truckKey = findColFuzzy(row, ['Truck In No.', 'Truck No.']);
                                 const truck = clean(row[truckKey]);
                                 if (truck === '-') return null;
@@ -193,8 +199,6 @@
                                     contVal = contInKey ? clean(row[contInKey]) : '-';
                                 }
 
-                                const shipmentType = clean(row[shipTypeKey]);
-
                                 return {
                                     truck: truck,
                                     truck_norm: truckDB.normalize(truck),
@@ -204,13 +208,14 @@
                                     containerSize: csKey ? clean(row[csKey]) : '-',
                                     remark: remKey ? clean(row[remKey]) : '-',
                                     customer: clean(row[customerKey]),
-                                    shipmentType: shipmentType,
+                                    shipmentType: clean(row[shipTypeKey]),
                                     status: 'Pending',
                                     uploadedDate: uploadDate,
                                     timestamp: Date.now()
                                 };
                             }).filter(b => b !== null);
 
+                            console.log(`Excel: Mapping complete. First item sample:`, newBookings[0]);
                             await truckDB.seedData(newBookings);
                             totalAdded += newBookings.length;
                             resolve();
@@ -279,8 +284,9 @@
                 // If searching, use direct Firestore search
                 bookings = await truckDB.searchPlate(filter);
             } else {
-                // If not searching, just get latest with limit
-                bookings = await truckDB.getAllBookings(currentLimit, forceRefresh);
+                // If not searching, do nothing (save quota)
+                tableBody.innerHTML = `<tr><td colspan="3" style="text-align:center; padding: 40px; color: var(--text-muted);">🔍 Type to search for a truck...</td></tr>`;
+                return;
             }
 
             // Ensure bookings is an array before processing

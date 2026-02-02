@@ -271,19 +271,8 @@
         }
 
         async function checkDatabase(plate) {
-            // First try: Normal search (now returns array)
-            let matches = await truckDB.searchPlate(plate);
-            let found = matches.length > 0 ? matches[0] : null;
-
-            // Second try: Aggressive Noise Removal
-            if (!found && plate.length >= 5) {
-                const suffix = plate.substring(1);
-                let suffixMatches = await truckDB.searchPlate(suffix);
-                found = suffixMatches.length > 0 ? suffixMatches[0] : null;
-                if (found) {
-                    plateDisplay.innerText = suffix + " (AUTO-FIXED)";
-                }
-            }
+            // Use strict exact matching for the camera to prevent "near misses" or partial hits
+            const found = await truckDB.findExactBooking(plate);
 
             if (found) {
                 stopScanning();

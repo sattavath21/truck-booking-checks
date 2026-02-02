@@ -43,59 +43,116 @@ class TruckDB {
     }
 
     async getAllBookings(rowLimit = 100, forceRefresh = false) {
+        if (rowLimit <= 0) return [];
         const now = Date.now();
 
-        // Return cache if valid and not forcing refresh
         if (!forceRefresh && this.cache && (now - this.cacheTimestamp < this.CACHE_DURATION)) {
-            console.log("Returning cached bookings");
+            console.log("TruckDB: Returning cached bookings");
             return this.cache.slice(0, rowLimit);
         }
 
         const sevenDaysAgo = now - (7 * 24 * 60 * 60 * 1000);
+        try {
+            const q = query(
+                collection(this.db, COLLECTION_NAME),
+                where("timestamp", ">=", sevenDaysAgo),
+                orderBy("timestamp", "desc"),
+                limit(rowLimit)
+            );
 
-        const q = query(
-            collection(this.db, COLLECTION_NAME),
-            where("timestamp", ">=", sevenDaysAgo),
-            orderBy("timestamp", "desc"),
-            limit(1000) // Fetch more than requested for cache
-        );
+            console.log("TruckDB: Fetching latest from Firestore...");
+            const querySnapshot = await getDocs(q);
+            const data = [];
+            querySnapshot.forEach((doc) => {
+                data.push({ ...doc.data(), id: doc.id });
+            });
 
-        console.log("Fetching bookings from Firestore...");
-        const querySnapshot = await getDocs(q);
-        const data = [];
-        querySnapshot.forEach((doc) => {
-            const itemData = doc.data();
-            data.push({ ...itemData, id: doc.id });
-        });
-
-        this.cache = data;
-        this.cacheTimestamp = now;
-
-        return data.slice(0, rowLimit);
+            this.cache = data;
+            this.cacheTimestamp = now;
+            return data;
+        } catch (err) {
+            console.error("TruckDB: getAllBookings Error:", err);
+            return this.cache || [];
+        }
     }
 
     normalize(text) {
         if (!text) return '';
-        // Same normalization as before for consistency
         return text.toString().toUpperCase()
             .replace(/[^A-Z0-9ก-ฮก-ຮ]/g, '');
+    }
+
+    // Generate all searchable substrings of length >= 3
+    getFragments(text) {
+        const normalized = this.normalize(text);
+        if (!normalized) return [];
+        const fragments = new Set();
+
+        // Add full normalized text
+        fragments.add(normalized);
+
+        // Add all substrings (length 1 and up)
+        for (let len = 1; len <= normalized.length; len++) {
+            for (let start = 0; start <= normalized.length - len; start++) {
+                fragments.add(normalized.substring(start, start + len));
+            }
+        }
+
+        const result = Array.from(fragments);
+        console.log(`TruckDB: Generated ${result.length} fragments for ${normalized}`, result);
+        return result;
     }
 
     async searchPlate(plate) {
         if (!plate) return [];
         const target = this.normalize(plate);
+        console.log(`TruckDB: Searching for "${plate}" (Normalized: "${target}")`);
 
-        // Search within a much larger set (1000) to ensure we find it
-        const all = await this.getAllBookings(1000);
+        // If search term is too short, we can't reliably use fragments (they start at length 3)
+        // But we can still try if it matches the full plate
+        console.log(`TruckDB: Searching Firestore for "${target}"...`);
 
-        // Find exact match first (after normalization)
-        const exactMatch = all.find(b => this.normalize(b.truck) === target);
-        if (exactMatch) return [exactMatch];
+        try {
+            const q = query(
+                collection(this.db, COLLECTION_NAME),
+                where("fragments", "array-contains", target),
+                limit(50)
+            );
 
-        // If no exact match, return all records that contain the target string
-        // This makes search "fucking work" for snippets like 701374
-        const partialMatches = all.filter(b => this.normalize(b.truck).includes(target));
-        return partialMatches;
+            const querySnapshot = await getDocs(q);
+            const matches = [];
+            querySnapshot.forEach((doc) => {
+                matches.push({ ...doc.data(), id: doc.id });
+            });
+
+            console.log(`TruckDB: Found ${matches.length} matches for "${target}"`);
+            return matches.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+        } catch (err) {
+            console.error("TruckDB: Search Query failed:", err);
+            // Fallback: If query fails (e.g. index missing), return empty
+            return [];
+        }
+    }
+
+    async findExactBooking(plate) {
+        if (!plate) return null;
+        const target = this.normalize(plate);
+
+        console.log(`TruckDB: Exact searching for "${target}"...`);
+        try {
+            const q = query(
+                collection(this.db, COLLECTION_NAME),
+                where("truck_norm", "==", target),
+                limit(1)
+            );
+            const snapshot = await getDocs(q);
+            if (snapshot.empty) return null;
+            const doc = snapshot.docs[0];
+            return { ...doc.data(), id: doc.id };
+        } catch (err) {
+            console.error("TruckDB: Exact search failed:", err);
+            return null;
+        }
     }
 
     async toggleBookingStatus(id, currentStatus) {
@@ -128,20 +185,37 @@ class TruckDB {
     }
 
     async seedData(dataArray) {
-        // Firestore batch has a limit of 500 operations
+        if (!dataArray || dataArray.length === 0) {
+            console.warn("TruckDB: No data to seed");
+            return;
+        }
+        console.log(`TruckDB: Seeding ${dataArray.length} items to "${COLLECTION_NAME}"...`);
         const BATCH_SIZE = 500;
         for (let i = 0; i < dataArray.length; i += BATCH_SIZE) {
             const batch = writeBatch(this.db);
             const chunk = dataArray.slice(i, i + BATCH_SIZE);
             chunk.forEach(item => {
-                // Use the provided ID as document name if available, else auto-gen
-                const docRef = item.id
-                    ? doc(this.db, COLLECTION_NAME, item.id)
+                const frags = this.getFragments(item.truck);
+                const enrichedItem = {
+                    ...item,
+                    fragments: frags,
+                    timestamp: item.timestamp || Date.now()
+                };
+
+                // Final check to make sure fragments aren't empty
+                if (frags.length === 0) {
+                    console.error("TruckDB: Empty fragments generated for:", item.truck);
+                }
+
+                const docRef = enrichedItem.id
+                    ? doc(this.db, COLLECTION_NAME, enrichedItem.id)
                     : doc(collection(this.db, COLLECTION_NAME));
-                batch.set(docRef, item);
+                batch.set(docRef, enrichedItem);
             });
             await batch.commit();
+            console.log(`TruckDB: Committed batch ${Math.floor(i / BATCH_SIZE) + 1}`);
         }
+        this.cache = null; // Clear cache after seed
     }
 
     async syncFromCloud() {
