@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Truck Check - Sun Paper</title>
+    <link rel="stylesheet" href="style.css">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Noto+Sans+Lao:wght@100..900&family=Sarabun:wght@400;700&display=swap"
+        rel="stylesheet">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <div class="lang-switcher">
+                <button class="lang-btn" id="lang-la" onclick="setLanguage('la')">LA</button>
+                <button class="lang-btn" id="lang-en" onclick="setLanguage('en')">EN</button>
+            </div>
+            <h1 data-i18n="title">TMGT LOGISTICS</h1>
+            <div class="nav-links">
+                <a href="index.html" class="nav-btn" data-i18n="nav_search">SEARCH</a>
+                <a href="camera.html" class="nav-btn" data-i18n="nav_camera">CAMERA</a>
+                <a href="sun_paper.html" class="nav-btn active" data-i18n="nav_sun_paper">SUN PAPER</a>
+            </div>
+        </header>
+
+        <main>
+            <div class="sun-paper-header">
+                <h2 data-i18n="sun_paper_header">Sun Paper Truck List</h2>
+                <div id="todayDate" class="sun-paper-date"></div>
+                <button id="updateBtn" class="nav-btn"
+                    style="background: var(--accent); color: white; margin-top: 10px;" data-i18n="btn_update">🔄
+                    Update</button>
+            </div>
+
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="Filter current list..." autocomplete="off"
+                    data-i18n="filter_placeholder">
+            </div>
+
+            <div class="sort-controls">
+                <button class="sort-btn active" data-sort="time" data-i18n="sort_time">Sort: Time (Newest)</button>
+                <button class="sort-btn" data-sort="truck" data-i18n="sort_truck">Sort: Truck (A-Z)</button>
+            </div>
+
+            <div id="truckList" class="sun-paper-list">
+                <!-- List will be populated here -->
+                <div style="text-align:center; padding: 40px; color: var(--text-muted);" data-i18n="loading_today">
+                    Loading today's trucks...
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Progress Dialog -->
+    <div id="dialogOverlay" class="dialog-overlay">
+        <div class="dialog-box">
+            <div id="dialogTitle" class="dialog-title" data-i18n="dialog_title_fetching">Fetching Data</div>
+            <div id="dialogContent" class="dialog-content" data-i18n="dialog_fetching_msg">
+                Checking for new updates...
+            </div>
+            <button id="dialogClose" class="dialog-close" style="display: none;" data-i18n="btn_close">Close</button>
+        </div>
+    </div>
+
+    <script type="module" src="db.js"></script>
+    <script type="module">
+        import tr from './translations.js';
+
+        const currentLang = localStorage.getItem('lang') || 'la';
+        window.currentLang = currentLang;
+
+        async function updateUI() {
+            const strings = tr[window.currentLang];
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (!strings[key]) return;
+
+                if (el.tagName === 'INPUT') {
+                    el.placeholder = strings[key];
+                } else {
+                    el.innerText = strings[key];
+                }
+            });
+
+            // Set today's date
+            const now = new Date();
+            const dd = String(now.getDate()).padStart(2, '0');
+            const mm = String(now.getMonth() + 1).padStart(2, '0');
+            const yyyy = now.getFullYear();
+            const today = `${dd}/${mm}/${yyyy}`;
+            document.getElementById('todayDate').innerText = `${strings.sun_paper_date_prefix} ${today}`;
+
+            // Update active button
+            document.querySelectorAll('.lang-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.id === `lang-${window.currentLang}`);
+            });
+
+            if (typeof window.renderList === 'function') {
+                window.renderList(document.getElementById('searchInput').value);
+            }
+        }
+
+        window.setLanguage = (lang) => {
+            window.currentLang = lang;
+            localStorage.setItem('lang', lang);
+            updateUI();
+        };
+
+        document.addEventListener('DOMContentLoaded', updateUI);
+        window.updateTranslations = updateUI;
+    </script>
+    <script type="module">
+        import tr from './translations.js';
+        let currentData = [];
+        let sortMode = 'time';
+
+        async function init() {
+            if (!window.truckDB) {
+                await new Promise(resolve => {
+                    const check = setInterval(() => {
+                        if (window.truckDB) {
+                            clearInterval(check);
+                            resolve();
+                        }
+                    }, 100);
+                });
+            }
+            await truckDB.init();
+
+            // Try to load from cache (localStorage) first
+            const cached = localStorage.getItem('sunPaperCache');
+            const cacheDate = localStorage.getItem('sunPaperCacheDate');
+            const today = new Date().toLocaleDateString('en-GB'); // dd/mm/yyyy
+
+            if (cached && cacheDate === today) {
+                console.log("Loading Sun Paper from cache");
+                currentData = JSON.parse(cached);
+                window.renderList();
+            } else {
+                console.log("No valid cache, fetching initial data");
+                await fetchSunPaper(true);
+            }
+
+            setupEventListeners();
+        }
+
+        function setupEventListeners() {
+            document.getElementById('updateBtn').addEventListener('click', () => fetchSunPaper(false));
+            document.getElementById('searchInput').addEventListener('input', (e) => window.renderList(e.target.value));
+
+            document.querySelectorAll('.sort-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    sortMode = btn.dataset.sort;
+                    window.renderList(document.getElementById('searchInput').value);
+                });
+            });
+
+            document.getElementById('dialogClose').addEventListener('click', () => {
+                document.getElementById('dialogOverlay').style.display = 'none';
+            });
+        }
+
+        async function fetchSunPaper(isInitial) {
+            const strings = tr[window.currentLang || 'la'];
+            const overlay = document.getElementById('dialogOverlay');
+            const title = document.getElementById('dialogTitle');
+            const content = document.getElementById('dialogContent');
+            const closeBtn = document.getElementById('dialogClose');
+
+            overlay.style.display = 'flex';
+            title.innerText = isInitial ? strings.dialog_title_init : strings.dialog_title_updates;
+            content.innerHTML = strings.dialog_fetching_msg;
+            closeBtn.style.display = 'none';
+
+            try {
+                // Import firestore helpers
+                const { collection, getDocs, query, where, orderBy } = await import("https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js");
+
+                const now = new Date();
+                const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+
+                const q = query(
+                    collection(truckDB.db, 'LogisticsData'),
+                    where("customer", "==", "SUN PAPER HOLDING LAO CO.,LTD"),
+                    where("timestamp", ">=", startOfDay),
+                    orderBy("timestamp", "desc")
+                );
+
+                const snapshot = await getDocs(q);
+                const newData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+
+                // Optimization check
+                if (!isInitial) {
+                    const newItems = newData.filter(n => !currentData.find(c => c.id === n.id));
+                    if (newItems.length === 0) {
+                        content.innerHTML = window.currentLang === 'la' ?
+                            "<strong>ບໍ່ພົບຂໍ້ມູນໃໝ່.</strong><br>ລາຍການແມ່ນເປັນປັດຈຸບັນແລ້ວ." :
+                            "<strong>No new data found.</strong><br>The list is already up to date.";
+                        closeBtn.style.display = 'block';
+                        return;
+                    }
+
+                    const newTrucks = newItems.map(n => n.truck).join(', ');
+                    content.innerHTML = window.currentLang === 'la' ?
+                        `<strong>ດຶງຂໍ້ມູນໃໝ່ໄດ້ ${newItems.length} ຄັນ:</strong><br>${newTrucks}` :
+                        `<strong>Fetched ${newItems.length} new trucks:</strong><br>${newTrucks}`;
+                } else {
+                    content.innerHTML = window.currentLang === 'la' ?
+                        `ໂຫຼດຂໍ້ມູນສຳເລັດ ${newData.length} ຄັນ.` :
+                        `Successfully loaded ${newData.length} trucks.`;
+                    setTimeout(() => overlay.style.display = 'none', 1000);
+                }
+
+                currentData = newData;
+                localStorage.setItem('sunPaperCache', JSON.stringify(currentData));
+                localStorage.setItem('sunPaperCacheDate', new Date().toLocaleDateString('en-GB'));
+
+                window.renderList();
+                if (!isInitial) closeBtn.style.display = 'block';
+
+            } catch (err) {
+                console.error(err);
+                content.innerHTML = `<span style="color:var(--danger)">Error: ${err.message}</span>`;
+                closeBtn.style.display = 'block';
+            }
+        }
+
+        window.renderList = function (filterStr = '') {
+            const strings = tr[window.currentLang || 'la'];
+            const listContainer = document.getElementById('truckList');
+            if (!listContainer) return;
+            const normalizedFilter = (filterStr || '').toLowerCase().replace(/\s/g, '');
+
+            let displayList = [...currentData];
+
+            if (normalizedFilter) {
+                displayList = displayList.filter(b =>
+                    truckDB.normalize(b.truck).includes(normalizedFilter) ||
+                    (b.container && truckDB.normalize(b.container).includes(normalizedFilter)) ||
+                    (b.trailer && truckDB.normalize(b.trailer).includes(normalizedFilter))
+                );
+            }
+
+            if (sortMode === 'time') {
+                displayList.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+            } else {
+                displayList.sort((a, b) => a.truck.localeCompare(b.truck));
+            }
+
+            if (displayList.length === 0) {
+                listContainer.innerHTML = `<div style="grid-column: 1/-1; text-align:center; padding: 40px; color:var(--text-muted)">${normalizedFilter ? strings.no_matches_found : strings.no_today_bookings}</div>`;
+                return;
+            }
+
+            // Dynamic detection tracking (Truck plate -> Array of {trailer, id, timestamp})
+            const truckHistory = new Map();
+
+            // First pass: Group by truck plate to determine sequences
+            // We use the full displayList which is already today's data.
+            // But we need to sort BY ASCENDING TIME to correctly assign "1st", "2nd" etc.
+            const chronologicalList = [...displayList].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+
+            chronologicalList.forEach(b => {
+                const normTruck = truckDB.normalize(b.truck);
+                if (!normTruck || normTruck === '-') return;
+
+                if (!truckHistory.has(normTruck)) {
+                    truckHistory.set(normTruck, []);
+                }
+                truckHistory.get(normTruck).push({
+                    id: b.id,
+                    trailerNorm: truckDB.normalize(b.trailer || '-')
+                });
+            });
+
+            // Map to store final numbering for display
+            const entryTags = new Map();
+
+            truckHistory.forEach((entries, plate) => {
+                // Determine 1st valid trailer (the one that arrived first)
+                const firstTrailer = entries[0].trailerNorm;
+
+                entries.forEach((entry, idx) => {
+                    if (idx > 0) { // 2nd, 3rd...
+                        if (entry.trailerNorm === firstTrailer) {
+                            // Exact duplicate (Truck + Trailer)
+                            entryTags.set(entry.id, {
+                                type: 'duplicate',
+                                number: idx + 1
+                            });
+                        } else {
+                            // Same Truck, Different Trailer
+                            entryTags.set(entry.id, {
+                                type: 'province_warn'
+                            });
+                        }
+                    }
+                });
+            });
+
+            listContainer.innerHTML = displayList.map(b => {
+                const isPassed = b.status === 'Passed';
+                const tag = entryTags.get(b.id);
+
+                let warningHTML = '';
+                if (tag) {
+                    if (tag.type === 'duplicate') {
+                        const label = strings.warning_entry_number.replace('{n}', tag.number);
+                        warningHTML = `<div class="warning-badge bg-duplicate">${label}</div>`;
+                    } else if (tag.type === 'province_warn') {
+                        warningHTML = `<div class="warning-badge bg-province-warn">${strings.warning_diff_province}</div>`;
+                    }
+                }
+
+                // Extract time from 'DD/MM/YYYY HH:mm:ss'
+                const uploadTime = b.uploadedDate && b.uploadedDate.includes(' ') ? b.uploadedDate.split(' ')[1] : '';
+
+                return `
+                    <div class="sun-paper-item ${isPassed ? 'row-passed' : ''}">
+                        ${warningHTML}
+                        <div class="sun-paper-info">
+                            <div class="sun-paper-truck">${strings.label_truck}: ${b.truck}</div>
+                            <div class="sun-paper-trailer">${strings.label_trailer}: ${b.trailer || '-'}</div>
+                            <div class="sun-paper-meta">
+                                <strong>${strings.label_product}:</strong> ${b.remark || '-'}
+                            </div>
+                            <div class="sun-paper-meta" style="margin-top: 4px; font-style: italic; opacity: 0.8;">
+                                ${b.container && b.container !== '-' ? `Cont: ${b.container}` : ''}
+                                ${b.truckSize !== '-' ? ` / ${b.truckSize}` : ''}
+                                ${uploadTime ? ` | Time: ${uploadTime}` : ''}
+                            </div>
+                        </div>
+                        <button class="mark-btn sun-paper-btn ${isPassed ? 'badge-passed' : ''}" 
+                                onclick="window.toggleEntry('${b.id}', '${b.status}')">
+                            ${isPassed ? strings.btn_passed_paper : strings.btn_mark_paper}
+                        </button>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        window.toggleEntry = async (id, currentStatus) => {
+            const strings = tr[window.currentLang || 'la'];
+            const btn = document.querySelector(`button[onclick*="${id}"]`);
+            if (btn) {
+                btn.disabled = true;
+                btn.innerText = '⏳ ...';
+            }
+
+            try {
+                await truckDB.toggleBookingStatus(id, currentStatus);
+
+                const idx = currentData.findIndex(item => item.id === id);
+                if (idx !== -1) {
+                    currentData[idx].status = currentStatus === 'Passed' ? 'Pending' : 'Passed';
+                    localStorage.setItem('sunPaperCache', JSON.stringify(currentData));
+                }
+
+                window.renderList(document.getElementById('searchInput').value);
+            } catch (err) {
+                alert("Update failed: " + err.message);
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerText = currentStatus === 'Passed' ? strings.btn_passed_paper : strings.btn_mark_paper;
+                }
+            }
+        };
+
+        // Initialize when DB is ready
+        init();
+    </script>
+</body>
+
+</html>

@@ -7,7 +7,7 @@
     <title>Truck Check - Search</title>
     <link rel="stylesheet" href="style.css">
     <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Sarabun:wght@400;700&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Noto+Sans+Lao:wght@100..900&family=Sarabun:wght@400;700&display=swap"
         rel="stylesheet">
     <!-- SheetJS for Excel Parsing -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -16,25 +16,31 @@
 <body>
     <div class="container">
         <header>
-            <h1>TMGT LOGISTICS</h1>
+            <div class="lang-switcher">
+                <button class="lang-btn" id="lang-la" onclick="setLanguage('la')">LA</button>
+                <button class="lang-btn" id="lang-en" onclick="setLanguage('en')">EN</button>
+            </div>
+            <h1 data-i18n="title">TMGT LOGISTICS</h1>
             <div class="nav-links">
-                <a href="index.html" class="nav-btn active">SEARCH</a>
-                <a href="camera.html" class="nav-btn">CAMERA</a>
+                <a href="index.html" class="nav-btn active" data-i18n="nav_search">SEARCH</a>
+                <a href="camera.html" class="nav-btn" data-i18n="nav_camera">CAMERA</a>
+                <a href="sun_paper.html" class="nav-btn" data-i18n="nav_sun_paper">SUN PAPER</a>
             </div>
         </header>
 
         <main>
             <form class="search-box" id="searchForm" style="display: flex; gap: 8px;">
                 <input type="text" id="searchInput" inputmode="numeric" placeholder="Search by truck plate..."
-                    autocomplete="off" style="flex: 1;">
-                <button type="submit" class="nav-btn" style="padding: 12px 20px; white-space: nowrap;">🔍
-                    Search</button>
+                    data-i18n="search_placeholder" autocomplete="off" style="flex: 1;">
+                <button type="submit" class="nav-btn" style="padding: 12px 20px; white-space: nowrap;"
+                    data-i18n="search_btn">🔍 Search</button>
             </form>
 
             <div class="upload-section">
                 <div class="upload-controls">
                     <div class="file-input-wrapper">
-                        <label for="excelUpload" class="file-input-label" id="fileLabel">📁 Upload Bookings (Select
+                        <label for="excelUpload" class="file-input-label" id="fileLabel" data-i18n="upload_label">📁
+                            Upload Bookings (Select
                             Multiple)</label>
                         <input type="file" id="excelUpload" accept=".xlsx, .xls" multiple>
                     </div>
@@ -47,7 +53,8 @@
 
             <div class="table-controls"
                 style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding: 0 4px;">
-                <span style="font-size: 0.75rem; color: var(--text-muted);">Rows to fetch:</span>
+                <span style="font-size: 0.75rem; color: var(--text-muted);" data-i18n="rows_to_fetch">Rows to
+                    fetch:</span>
                 <select id="rowLimit" class="nav-btn" style="padding: 2px 8px; border-radius: 8px; font-size: 0.75rem;">
                     <option value="5">5 rows</option>
                     <option value="10" selected>10 rows</option>
@@ -58,14 +65,15 @@
                 <table>
                     <thead>
                         <tr>
-                            <th>Truck / Container</th>
-                            <th>Customer / Shipment Type</th>
-                            <th>Size / Remark</th>
+                            <th data-i18n="th_truck">Truck / Container</th>
+                            <th data-i18n="th_customer">Customer / Shipment Type</th>
+                            <th data-i18n="th_remark">Size / Remark</th>
                         </tr>
                     </thead>
                     <tbody id="bookingTable">
                         <tr>
-                            <td colspan="3" style="text-align:center; padding: 40px; color: var(--text-muted);">
+                            <td colspan="3" style="text-align:center; padding: 40px; color: var(--text-muted);"
+                                data-i18n="loading_bookings">
                                 Loading bookings...
                             </td>
                         </tr>
@@ -76,6 +84,53 @@
     </div>
 
     <script type="module" src="db.js"></script>
+    <script type="module">
+        import tr from './translations.js';
+
+        const currentLang = localStorage.getItem('lang') || 'la';
+        window.currentLang = currentLang;
+
+        function updateUI() {
+            const strings = tr[window.currentLang];
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (!strings[key]) return;
+
+                if (el.tagName === 'INPUT') {
+                    el.placeholder = strings[key];
+                } else {
+                    el.innerText = strings[key];
+                }
+            });
+
+            if (strings.title) document.title = strings.title;
+
+            // Update active button
+            document.querySelectorAll('.lang-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.id === `lang-${window.currentLang}`);
+            });
+
+            // Re-render table to update dynamic content if search results exist
+            const searchInput = document.getElementById('searchInput');
+            if (searchInput && searchInput.value) {
+                // Only render if there's an actual search to re-translate
+                renderTable(searchInput.value);
+            } else {
+                renderTable(); // Reset message
+            }
+        }
+
+        window.setLanguage = (lang) => {
+            window.currentLang = lang;
+            localStorage.setItem('lang', lang);
+            updateUI();
+        };
+
+        // Initialize translation on load
+        document.addEventListener('DOMContentLoaded', updateUI);
+        // Expose updateUI globally for dynamic renders
+        window.updateTranslations = updateUI;
+    </script>
     <script src="mockData.js"></script>
     <script>
         const tableBody = document.getElementById('bookingTable');
@@ -176,7 +231,13 @@
                             };
 
                             const now = new Date();
-                            const uploadDate = `${now.getDate().toString().padStart(2, '0')}/${(now.getMonth() + 1).toString().padStart(2, '0')}/${now.getFullYear()}`;
+                            const dd = String(now.getDate()).padStart(2, '0');
+                            const mm = String(now.getMonth() + 1).padStart(2, '0');
+                            const yyyy = now.getFullYear();
+                            const hh = String(now.getHours()).padStart(2, '0');
+                            const min = String(now.getMinutes()).padStart(2, '0');
+                            const ss = String(now.getSeconds()).padStart(2, '0');
+                            const uploadDate = `${dd}/${mm}/${yyyy} ${hh}:${min}:${ss}`;
 
                             console.log(`Excel: Found ${rows.length} total rows in sheet. Mapping...`);
                             const newBookings = rows.map((row, idx) => {
@@ -285,7 +346,9 @@
                 bookings = await truckDB.searchPlate(filter);
             } else {
                 // If not searching, do nothing (save quota)
-                tableBody.innerHTML = `<tr><td colspan="3" style="text-align:center; padding: 40px; color: var(--text-muted);">🔍 Type to search for a truck...</td></tr>`;
+                const tr = (await import('./translations.js')).default;
+                const strings = tr[window.currentLang || 'la'];
+                tableBody.innerHTML = `<tr><td colspan="3" style="text-align:center; padding: 40px; color: var(--text-muted);">${strings.search_prompt}</td></tr>`;
                 return;
             }
 
@@ -294,15 +357,15 @@
                 bookings = [];
             }
 
-            // Group by truck plate to find re-entries in the fetched set
-            // Wait, if users selected 5, we only have 5. Re-entry detection 
-            // works best on the fetched set.
+            // Group by truck plate AND date to find re-entries in the fetched set
             const grouped = {};
             bookings.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0)).forEach(b => {
                 const norm = truckDB.normalize(b.truck);
                 if (!norm) return;
-                if (!grouped[norm]) grouped[norm] = [];
-                grouped[norm].push(b);
+                // Combine normalized plate and the date string for date-specific grouping
+                const key = `${norm}_${b.uploadedDate}`;
+                if (!grouped[key]) grouped[key] = [];
+                grouped[key].push(b);
             });
 
             // Map re-entry index back to bookings
@@ -326,8 +389,11 @@
             // But if searching, we might want to show all matches found.
             const displayList = normalizedFilter ? filtered : filtered.slice(0, currentLimit);
 
+            const tr = (await import('./translations.js')).default;
+            const strings = tr[window.currentLang || 'la'];
+
             if (displayList.length === 0) {
-                tableBody.innerHTML = `<tr><td colspan="3" style="text-align:center; padding: 40px; color: var(--text-muted);">No bookings found</td></tr>`;
+                tableBody.innerHTML = `<tr><td colspan="3" style="text-align:center; padding: 40px; color: var(--text-muted);">${strings.no_bookings}</td></tr>`;
                 return;
             }
 
@@ -342,11 +408,11 @@
                             <div class="chip-group">
                                 <span class="status-badge bg-warning badge-stack">
                                     <div class="stack-row">
-                                        <span class="badge-label">Truck</span>
+                                        <span class="badge-label">${strings.label_truck}</span>
                                         <span class="badge-value">${b.truck}</span>
                                     </div>
                                     <div class="stack-row">
-                                        <span class="badge-label">Trailer</span>
+                                        <span class="badge-label">${strings.label_trailer}</span>
                                         <span class="badge-value">
                                             ${b.trailer && b.trailer !== '-' ? b.trailer : '-'}
                                         </span>
@@ -365,13 +431,13 @@
                                         style="${isPassed ? 'border:none; margin-top:4px;' : ''}"
                                         data-id="${b.id}" 
                                         onclick="toggleEntry('${b.id}', '${b.status}')">
-                                    ${isPassed ? '✅ PASSED (Undo)' : 'Mark as Entry'}
+                                    ${isPassed ? strings.btn_passed_undo : strings.btn_mark_entry}
                                 </button>
                             </div>
 
                             ${b.container && b.container !== '-' ? `
                                 <div class="chip-group">
-                                    <span class="chip chip-solo bg-success"><span class="badge-label">Cont</span>${b.container}</span>
+                                    <span class="chip chip-solo bg-success"><span class="badge-label">${strings.label_cont}</span>${b.container}</span>
                                 </div>
                             ` : ''}
                         </div>
@@ -387,11 +453,11 @@
                     <td>
                         <div class="size-cell">
                             <div class="chip-group" style="justify-content: flex-end; margin-bottom: 4px; gap: 2px">
-                                ${b.truckSize && b.truckSize !== '-' ? `<span class="status-badge bg-warning" style="margin-left: 4px;"><span class="badge-label">T-Size</span>${b.truckSize}</span>` : ''}
-                                ${b.containerSize && b.containerSize !== '-' ? `<span class="status-badge bg-success" style="margin-left: 4px;"><span class="badge-label">C-Size</span>${b.containerSize}</span>` : ''}
+                                ${b.truckSize && b.truckSize !== '-' ? `<span class="status-badge bg-warning" style="margin-left: 4px;"><span class="badge-label">${strings.label_tsize}</span>${b.truckSize}</span>` : ''}
+                                ${b.containerSize && b.containerSize !== '-' ? `<span class="status-badge bg-success" style="margin-left: 4px;"><span class="badge-label">${strings.label_csize}</span>${b.containerSize}</span>` : ''}
                             </div>
                             ${b.remark && b.remark !== '-' ? `<div class="remark-text">${b.remark}</div>` : ''}
-                            <span class="upload-date">Added: ${b.uploadedDate || 'Mock'}</span>
+                            <span class="upload-date">${strings.label_added} ${b.uploadedDate || 'Mock'}</span>
                         </div>
                     </td>
                 </tr>

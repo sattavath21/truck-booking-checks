@@ -7,7 +7,7 @@
     <title>Truck Check - Camera</title>
     <link rel="stylesheet" href="style.css">
     <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Sarabun:wght@400;700&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Noto+Sans+Lao:wght@100..900&family=Sarabun:wght@400;700&display=swap"
         rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 </head>
@@ -15,10 +15,15 @@
 <body>
     <div class="container">
         <header>
-            <h1>TMGT LOGISTICS</h1>
+            <div class="lang-switcher">
+                <button class="lang-btn" id="lang-la" onclick="setLanguage('la')">LA</button>
+                <button class="lang-btn" id="lang-en" onclick="setLanguage('en')">EN</button>
+            </div>
+            <h1 data-i18n="title">TMGT LOGISTICS</h1>
             <div class="nav-links">
-                <a href="index.html" class="nav-btn">SEARCH</a>
-                <a href="camera.html" class="nav-btn active">CAMERA</a>
+                <a href="index.html" class="nav-btn" data-i18n="nav_search">SEARCH</a>
+                <a href="camera.html" class="nav-btn active" data-i18n="nav_camera">CAMERA</a>
+                <a href="sun_paper.html" class="nav-btn" data-i18n="nav_sun_paper">SUN PAPER</a>
             </div>
         </header>
 
@@ -32,11 +37,12 @@
 
             <div style="text-align: center;">
                 <div id="plateDisplay"
-                    style="font-size: 1.5rem; font-weight: 800; margin-bottom: 10px; color: var(--accent);">
-                    FINDING PLATE...
+                    style="font-size: 1.5rem; font-weight: 800; margin-bottom: 10px; color: var(--accent);"
+                    data-i18n="status_scanning">
+                    SCANNING...
                 </div>
                 <div id="statusIndicator" class="scan-status bg-warning"
-                    style="display:inline-block; margin-bottom: 20px;">
+                    style="display:inline-block; margin-bottom: 20px;" data-i18n="status_scanning">
                     SCANNING...
                 </div>
 
@@ -55,11 +61,11 @@
                         <div class="chip-group">
                             <span class="status-badge bg-warning badge-stack" style="width: 100%;">
                                 <div class="stack-row">
-                                    <span class="badge-label">Truck</span>
+                                    <span class="badge-label" data-i18n="label_truck">Truck</span>
                                     <span class="badge-value" id="resTruck">-</span>
                                 </div>
                                 <div class="stack-row" id="resTrailerRow">
-                                    <span class="badge-label">Trailer</span>
+                                    <span class="badge-label" data-i18n="label_trailer">Trailer</span>
                                     <span class="badge-value" id="resTrailer">-</span>
                                 </div>
                             </span>
@@ -67,22 +73,22 @@
 
                         <!-- Truck Size -->
                         <div id="resTruckSizeGroup" class="chip-group">
-                            <span class="status-badge bg-warning"><span class="badge-label">T-Size</span><span
-                                    id="resTruckSize">-</span></span>
+                            <span class="status-badge bg-warning"><span class="badge-label"
+                                    data-i18n="label_tsize">T-Size</span><span id="resTruckSize">-</span></span>
                         </div>
 
                         <div style="height: 4px;"></div>
 
                         <!-- Container Card -->
                         <div id="resContainerGroup" class="chip-group">
-                            <span class="chip chip-solo bg-success"><span class="badge-label">Cont</span><span
-                                    id="resContainer">-</span></span>
+                            <span class="chip chip-solo bg-success"><span class="badge-label"
+                                    data-i18n="label_cont">Cont</span><span id="resContainer">-</span></span>
                         </div>
 
                         <!-- Container Size -->
                         <div id="resContSizeGroup" class="chip-group">
-                            <span class="status-badge bg-success"><span class="badge-label">C-Size</span><span
-                                    id="resContSize">-</span></span>
+                            <span class="status-badge bg-success"><span class="badge-label"
+                                    data-i18n="label_csize">C-Size</span><span id="resContSize">-</span></span>
                         </div>
                     </div>
 
@@ -109,6 +115,53 @@
     <canvas id="canvas" style="display:none;"></canvas>
 
     <script type="module" src="db.js"></script>
+    <script type="module">
+        import tr from './translations.js';
+
+        const currentLang = localStorage.getItem('lang') || 'la';
+        window.currentLang = currentLang;
+
+        async function updateUI() {
+            const strings = tr[window.currentLang];
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (!strings[key]) return;
+
+                if (el.tagName === 'INPUT') {
+                    el.placeholder = strings[key];
+                } else {
+                    el.innerText = strings[key];
+                }
+            });
+
+            // Update active button
+            document.querySelectorAll('.lang-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.id === `lang-${window.currentLang}`);
+            });
+
+            // Special handling for dynamic camera status if not scanning/matched
+            const statusIndicator = document.getElementById('statusIndicator');
+            const actionBtn = document.getElementById('actionBtn');
+            const plateDisplay = document.getElementById('plateDisplay');
+
+            if (window.scanning) {
+                statusIndicator.innerText = strings.status_scanning;
+                if (plateDisplay.innerText.includes('SCANNING') || plateDisplay.innerText.includes('FINDING')) {
+                    plateDisplay.innerText = strings.status_scanning;
+                }
+                actionBtn.innerText = window.currentLang === 'la' ? "ຢຸດການສະແກນ" : "STOP SCAN"; // Fallback for action btn
+            }
+        }
+
+        window.setLanguage = (lang) => {
+            window.currentLang = lang;
+            localStorage.setItem('lang', lang);
+            updateUI();
+        };
+
+        document.addEventListener('DOMContentLoaded', updateUI);
+        window.updateTranslations = updateUI;
+    </script>
     <script>
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
@@ -274,18 +327,24 @@
             // Use strict exact matching for the camera to prevent "near misses" or partial hits
             const found = await truckDB.findExactBooking(plate);
 
+            const trObj = (await import('./translations.js')).default;
+            const strings = trObj[window.currentLang || 'la'];
+
             if (found) {
                 stopScanning();
                 showResult(found);
             } else {
-                statusIndicator.innerText = "SCANNING...";
+                statusIndicator.innerText = strings.status_scanning;
                 statusIndicator.className = "scan-status bg-warning";
                 resultCard.style.display = 'none';
             }
         }
 
-        function showResult(data) {
-            statusIndicator.innerText = "MATCH FOUND";
+        async function showResult(data) {
+            const trObj = (await import('./translations.js')).default;
+            const strings = trObj[window.currentLang || 'la'];
+
+            statusIndicator.innerText = strings.status_match;
             statusIndicator.className = "scan-status bg-success";
 
             const clean = (val) => (!val || val.toString().toLowerCase() === 'nan' || val === '-') ? null : val;
@@ -341,7 +400,7 @@
 
             resultCard.style.display = 'block';
 
-            actionBtn.innerText = "RESUME SCAN";
+            actionBtn.innerText = window.currentLang === 'la' ? "ເລີ່ມສະແກນໃໝ່" : "RESUME SCAN";
             actionBtn.className = "btn-primary";
         }
 
@@ -349,17 +408,20 @@
             scanning = false;
         }
 
-        function toggleScan() {
+        async function toggleScan() {
+            const trObj = (await import('./translations.js')).default;
+            const strings = trObj[window.currentLang || 'la'];
+
             if (scanning) {
                 scanning = false;
-                statusIndicator.innerText = "STOPPED";
+                statusIndicator.innerText = window.currentLang === 'la' ? "ຢຸດແລ້ວ" : "STOPPED";
                 statusIndicator.className = "scan-status bg-danger";
-                actionBtn.innerText = "RESUME SCAN";
+                actionBtn.innerText = window.currentLang === 'la' ? "ເລີ່ມສະແກນໃໝ່" : "RESUME SCAN";
             } else {
                 scanning = true;
-                statusIndicator.innerText = "SCANNING...";
+                statusIndicator.innerText = strings.status_scanning;
                 statusIndicator.className = "scan-status bg-warning";
-                actionBtn.innerText = "STOP SCAN";
+                actionBtn.innerText = window.currentLang === 'la' ? "ຢຸດການສະແກນ" : "STOP SCAN";
                 resultCard.style.display = 'none';
                 requestAnimationFrame(scanLoop);
             }
