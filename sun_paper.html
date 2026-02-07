@@ -139,9 +139,11 @@
                 console.log("Loading Sun Paper from cache");
                 currentData = JSON.parse(cached);
                 window.renderList();
+                // Silent background sync to get latest statuses
+                fetchSunPaper(true, true);
             } else {
                 console.log("No valid cache, fetching initial data");
-                await fetchSunPaper(true);
+                await fetchSunPaper(true, false);
             }
 
             setupEventListeners();
@@ -165,17 +167,19 @@
             });
         }
 
-        async function fetchSunPaper(isInitial) {
+        async function fetchSunPaper(isInitial, silent = false) {
             const strings = tr[window.currentLang || 'la'];
             const overlay = document.getElementById('dialogOverlay');
             const title = document.getElementById('dialogTitle');
             const content = document.getElementById('dialogContent');
             const closeBtn = document.getElementById('dialogClose');
 
-            overlay.style.display = 'flex';
-            title.innerText = isInitial ? strings.dialog_title_init : strings.dialog_title_updates;
-            content.innerHTML = strings.dialog_fetching_msg;
-            closeBtn.style.display = 'none';
+            if (!silent) {
+                overlay.style.display = 'flex';
+                title.innerText = isInitial ? strings.dialog_title_init : strings.dialog_title_updates;
+                content.innerHTML = strings.dialog_fetching_msg;
+                closeBtn.style.display = 'none';
+            }
 
             try {
                 // Import firestore helpers
@@ -194,10 +198,9 @@
                 const snapshot = await getDocs(q);
                 const newData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
 
-                // Optimization check
                 if (!isInitial) {
                     const newItems = newData.filter(n => !currentData.find(c => c.id === n.id));
-                    if (newItems.length === 0) {
+                    if (newItems.length === 0 && !silent) {
                         content.innerHTML = window.currentLang === 'la' ?
                             "<strong>ບໍ່ພົບຂໍ້ມູນໃໝ່.</strong><br>ລາຍການແມ່ນເປັນປັດຈຸບັນແລ້ວ." :
                             "<strong>No new data found.</strong><br>The list is already up to date.";
@@ -205,15 +208,21 @@
                         return;
                     }
 
-                    const newTrucks = newItems.map(n => n.truck).join(', ');
-                    content.innerHTML = window.currentLang === 'la' ?
-                        `<strong>ດຶງຂໍ້ມູນໃໝ່ໄດ້ ${newItems.length} ຄັນ:</strong><br>${newTrucks}` :
-                        `<strong>Fetched ${newItems.length} new trucks:</strong><br>${newTrucks}`;
+                    if (newItems.length > 0) {
+                        const newTrucks = newItems.map(n => n.truck).join(', ');
+                        content.innerHTML = window.currentLang === 'la' ?
+                            `<strong>ດຶງຂໍ້ມູນໃໝ່ໄດ້ ${newItems.length} ຄັນ:</strong><br>${newTrucks}` :
+                            `<strong>Fetched ${newItems.length} new trucks:</strong><br>${newTrucks}`;
+                    } else if (silent) {
+                        // Just a status sync, no need to alert
+                    }
                 } else {
-                    content.innerHTML = window.currentLang === 'la' ?
-                        `ໂຫຼດຂໍ້ມູນສຳເລັດ ${newData.length} ຄັນ.` :
-                        `Successfully loaded ${newData.length} trucks.`;
-                    setTimeout(() => overlay.style.display = 'none', 1000);
+                    if (!silent) {
+                        content.innerHTML = window.currentLang === 'la' ?
+                            `ໂຫຼດຂໍ້ມູນສຳເລັດ ${newData.length} ຄັນ.` :
+                            `Successfully loaded ${newData.length} trucks.`;
+                        setTimeout(() => overlay.style.display = 'none', 1000);
+                    }
                 }
 
                 currentData = newData;
