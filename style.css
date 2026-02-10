@@ -474,6 +474,9 @@ tr:last-child td {
     display: block;
     margin-top: 4px;
     font-weight: 700;
+    background-color: #fbff00;
+    padding: 6px 8px;
+    border-radius: 6px;
 }
 
 .badge-reentry {
