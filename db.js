@@ -51,11 +51,13 @@ class TruckDB {
             return this.cache.slice(0, rowLimit);
         }
 
-        const twoDaysAgo = now - (2 * 24 * 60 * 60 * 1000);
+        // const twoDaysAgo = now - (2 * 24 * 60 * 60 * 1000);
+        const oneDayAgo = now - (24 * 60 * 60 * 1000);
+
         try {
             const q = query(
                 collection(this.db, COLLECTION_NAME),
-                where("timestamp", ">=", twoDaysAgo),
+                where("timestamp", ">=", oneDayAgo),
                 orderBy("timestamp", "desc"),
                 limit(rowLimit)
             );
@@ -113,11 +115,11 @@ class TruckDB {
         console.log(`TruckDB: Searching Firestore for "${target}"...`);
 
         try {
-            const twoDaysAgo = Date.now() - (2 * 24 * 60 * 60 * 1000);
+            const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
             const q = query(
                 collection(this.db, COLLECTION_NAME),
                 where("fragments", "array-contains", target),
-                where("timestamp", ">=", twoDaysAgo),
+                where("timestamp", ">=", oneDayAgo),
                 limit(50)
             );
 
