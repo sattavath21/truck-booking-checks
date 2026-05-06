@@ -65,7 +65,7 @@ const translations = {
         nav_search: "ຄົ້ນຫາລົດ",
         nav_camera: "ສະແກນປ້າຍລົດ",
         nav_sun_paper: "ກວດລົດ Sun Paper",
-        nav_inter_transport: "ກວດລົດ Inter Transport",
+        nav_inter_transport: "ກວດລົດອິນເຕີ Transport",
         search_placeholder: "ຄົ້ນຫາປ້າຍລົດ",
         search_btn: "ຄົ້ນຫາ",
         upload_label: "ອັບໂຫຼດລາຍຊື່ລົດ",
