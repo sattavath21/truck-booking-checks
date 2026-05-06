@@ -4,6 +4,7 @@ const translations = {
         nav_search: "SEARCH",
         nav_camera: "CAMERA",
         nav_sun_paper: "SUN PAPER",
+        nav_inter_transport: "INTER TRANSPORT",
         search_placeholder: "Search by truck plate...",
         search_btn: "🔍 Search",
         upload_label: "📁 Upload Bookings (Select Multiple)",
@@ -35,6 +36,7 @@ const translations = {
 
         // Sun Paper Page
         sun_paper_header: "Sun Paper Truck List",
+        inter_transport_header: "Inter Transport Truck List",
         sun_paper_date_prefix: "for",
         warning_entry_number: "{n} Entry",
         warning_diff_province: "Duplicate License Plate",
@@ -56,12 +58,14 @@ const translations = {
         label_truck: "Truck",
         label_trailer: "Trailer",
         label_product: "Product",
+        
     },
     la: {
         title: "ເວັບກວດລົດຜະແນກ TM",
         nav_search: "ຄົ້ນຫາລົດ",
         nav_camera: "ສະແກນປ້າຍລົດ",
         nav_sun_paper: "ກວດລົດ Sun Paper",
+        nav_inter_transport: "ກວດລົດ Inter Transport",
         search_placeholder: "ຄົ້ນຫາປ້າຍລົດ",
         search_btn: "ຄົ້ນຫາ",
         upload_label: "ອັບໂຫຼດລາຍຊື່ລົດ",
@@ -96,6 +100,8 @@ const translations = {
 
         // Sun Paper Page
         sun_paper_header: "ລາຍຊື່ລົດ Sun Paper",
+        inter_transport_header: "ລາຍຊື່ລົດ Inter Transport",
+
         sun_paper_date_prefix: "ປະຈຳວັນທີ",
         warning_entry_number: "ລົດຄັນທີ {n}",
         warning_diff_province: "ທະບຽນຊ້ຳປ້າຍຕ່າງແຂວງ",
@@ -109,6 +115,8 @@ const translations = {
         dialog_title_init: "ກຳລັງເລີ່ມຕົ້ນ",
         dialog_title_updates: "ກວດສອບການອັບເດດ",
         dialog_fetching_msg: "ກຳລັງໂຫຼດລາຍຊື່ລົດປະຈຳວັນສຳລັບ Sun Paper Holding...",
+        dialog_fetching_msg_inter: "ກຳລັງໂຫຼດລາຍຊື່ລົດປະຈຳວັນສຳລັບ Inter Transport...",
+
         btn_close: "ປິດ",
         btn_mark_paper: "ໝາຍຜ່ານ",
         btn_passed_paper: "✅ ຜ່ານແລ້ວ",

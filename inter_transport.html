@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Truck Check - Sun Paper</title>
+    <title>Truck Check - Inter Transport</title>
     <link rel="stylesheet" href="style.css">
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Noto+Sans+Lao:wght@100..900&family=Sarabun:wght@400;700&display=swap"
@@ -22,15 +22,15 @@
             <div class="nav-links">
                 <a href="index.html" class="nav-btn" data-i18n="nav_search">SEARCH</a>
                 <a href="camera.html" class="nav-btn" data-i18n="nav_camera">CAMERA</a>
-                <a href="sun_paper.html" class="nav-btn active" data-i18n="nav_sun_paper">SUN PAPER</a>
-                                <a href="inter_transport.html" class="nav-btn" data-i18n="nav_inter_transport">INTER TRANSPORT</a>
+                <a href="sun_paper.html" class="nav-btn" data-i18n="nav_sun_paper">SUN PAPER</a>
+                <a href="inter_transport.html" class="nav-btn active" data-i18n="nav_inter_transport">INTER TRANSPORT</a>
 
             </div>
         </header>
 
         <main>
             <div class="sun-paper-header">
-                <h2 data-i18n="sun_paper_header">Sun Paper Truck List</h2>
+                <h2 data-i18n="inter_transport_header">Inter Transport Truck List</h2>
                 <div id="todayDate" class="sun-paper-date"></div>
                 <button id="updateBtn" class="nav-btn"
                     style="background: var(--accent); color: white; margin-top: 10px;" data-i18n="btn_update">🔄
@@ -60,7 +60,7 @@
     <div id="dialogOverlay" class="dialog-overlay">
         <div class="dialog-box">
             <div id="dialogTitle" class="dialog-title" data-i18n="dialog_title_fetching">Fetching Data</div>
-            <div id="dialogContent" class="dialog-content" data-i18n="dialog_fetching_msg">
+            <div id="dialogContent" class="dialog-content" data-i18n="dialog_fetching_msg_inter">
                 Checking for new updates...
             </div>
             <button id="dialogClose" class="dialog-close" style="display: none;" data-i18n="btn_close">Close</button>
@@ -179,7 +179,7 @@
             if (!silent) {
                 overlay.style.display = 'flex';
                 title.innerText = isInitial ? strings.dialog_title_init : strings.dialog_title_updates;
-                content.innerHTML = strings.dialog_fetching_msg;
+                content.innerHTML = strings.dialog_fetching_msg_inter;
                 closeBtn.style.display = 'none';
             }
 
@@ -192,7 +192,7 @@
 
                 const q = query(
                     collection(truckDB.db, 'LogisticsData'),
-                    where("customer", "==", "SUN PAPER HOLDING LAO CO.,LTD"),
+                    where("customer", "==", "INTER TRANSPORT CO.,LTD"),
                     where("timestamp", ">=", startOfDay),
                     orderBy("timestamp", "desc")
                 );
