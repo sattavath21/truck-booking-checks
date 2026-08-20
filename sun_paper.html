@@ -192,7 +192,7 @@
 
                 const q = query(
                     collection(truckDB.db, 'LogisticsData'),
-                    where("customer", "==", "SUN PAPER HOLDING LAO CO.,LTD"),
+                    where("customer", "==", "SUN PAPER HOLDING LAO CO LTD"),
                     where("timestamp", ">=", startOfDay),
                     orderBy("timestamp", "desc")
                 );
